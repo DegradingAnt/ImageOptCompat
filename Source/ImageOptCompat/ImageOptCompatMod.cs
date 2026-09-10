@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 using Verse;
@@ -9,6 +10,25 @@ public sealed class ImageOptCompatMod : Mod
 {
     public static ImageOptCompatSettings Settings { get; private set; } = null!;
     public static bool ImageOptActive { get; private set; }
+
+    /// null = Faster Game Loading is not active, so Image Opt's early-load race cannot happen.
+    /// true / false = FGL is active and does / does not carry an Image Opt compatibility layer.
+    public static bool? FglHasImageOptSupport { get; private set; }
+
+    /// null when FGL's settings match the tested configuration; otherwise the changed ones.
+    public static string? FglUntestedSettings { get; private set; }
+
+    /// FGL's defaults are the configuration that reached the main menu with Image Opt enabled on a
+    /// 1,478-mod list. Field names, not Scribe keys: these are read straight from the static fields
+    /// of FasterGameLoading.FasterGameLoadingSettings. verboseLogging is omitted - it only logs.
+    private static readonly (string Field, bool Tested)[] FglTestedConfig =
+    {
+        ("earlyModContentLoading", true),
+        ("enableMultiThreading", true),
+        ("xPathCaching", true),
+        ("delayGraphicLoading", false),
+        ("staticAtlasesBaking", false),
+    };
 
     public ImageOptCompatMod(ModContentPack content) : base(content)
     {
@@ -30,10 +50,56 @@ public sealed class ImageOptCompatMod : Mod
         }
 
         harmony.PatchAll();
+        CheckFasterGameLoading();
+        if (FglHasImageOptSupport == true) CheckFglSettings();
         Log.Message("[ImageOptCompat] active alongside Image Opt.");
 
         // Sweep before textures are requested, so a stale file is never served.
         if (Settings.sweepOrphanZstd) OrphanSweep.Run();
+    }
+
+    /// Both the official and Preview builds of Faster Game Loading share the packageId
+    /// Taranchuk.FasterGameLoading, so About.xml cannot express "requires the Preview": no
+    /// dependency or incompatibility entry can tell them apart. Check the CAPABILITY instead.
+    /// Without FGL's ImageOptEarlyLoadCoordinator, FGL's early content loading closes Image
+    /// Opt's texture channel early and loading can black-screen - which would look like our bug.
+    private static void CheckFasterGameLoading()
+    {
+        bool fglActive;
+        try { fglActive = ModsConfig.IsActive("Taranchuk.FasterGameLoading"); }
+        catch (Exception e) { Log.Warning($"[ImageOptCompat] could not query Faster Game Loading: {e.Message}"); return; }
+
+        if (!fglActive) { FglHasImageOptSupport = null; return; }
+
+        FglHasImageOptSupport = AccessTools.TypeByName("FasterGameLoading.ImageOptEarlyLoadCoordinator") != null;
+        if (FglHasImageOptSupport == true) return;
+
+        Log.Warning("[ImageOptCompat] Faster Game Loading is active but has no Image Opt compatibility layer. "
+                  + "Use 'Faster Game Loading - Continued (Preview)', or disable Faster Game Loading. "
+                  + "Without it, Image Opt can black-screen during loading.");
+    }
+
+    /// Warns - never overrides - when FGL is configured differently from what was tested. The
+    /// claim is deliberately "untested", not "broken": no non-default setting has been shown to
+    /// break Image Opt; they simply have not been tried with it.
+    private static void CheckFglSettings()
+    {
+        var type = AccessTools.TypeByName("FasterGameLoading.FasterGameLoadingSettings");
+        if (type == null) return;
+
+        var changed = new List<string>();
+        foreach (var (field, tested) in FglTestedConfig)
+        {
+            if (AccessTools.Field(type, field)?.GetValue(null) is bool value && value != tested)
+                changed.Add($"{field}={value}");
+        }
+
+        FglUntestedSettings = changed.Count == 0 ? null : string.Join(", ", changed);
+        if (FglUntestedSettings == null) return;
+
+        Log.Warning($"[ImageOptCompat] Faster Game Loading settings differ from the tested configuration "
+                  + $"({FglUntestedSettings}). This combination has not been tested with Image Opt. "
+                  + "If loading misbehaves, reset Faster Game Loading's settings to default first.");
     }
 
     public override string SettingsCategory() => "ImageOptCompat";
@@ -45,6 +111,14 @@ public sealed class ImageOptCompatMod : Mod
         l.Label(ImageOptActive
             ? "Image Opt detected - fixes are live."
             : "Image Opt is NOT active. Nothing here does anything.");
+        l.Label(FglHasImageOptSupport switch
+        {
+            null  => "Faster Game Loading: not active (fine).",
+            true  => "Faster Game Loading: compatible build detected.",
+            false => "WARNING: Faster Game Loading lacks Image Opt support - use the Preview build.",
+        });
+        if (FglUntestedSettings != null)
+            l.Label($"Faster Game Loading settings differ from the tested defaults: {FglUntestedSettings}");
         l.GapLine();
         l.CheckboxLabeled("Vehicle readback fix", ref Settings.vehicleReadback,
             "Give vehicle mods CPU-readable texture copies so Vehicle Framework can build liveries. "

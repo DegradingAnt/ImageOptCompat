@@ -6,6 +6,28 @@ You still need Image Opt installed — this patches around it and does not repla
 It was built to make Image Opt usable on a very large mod list (the ~1,478-mod Progression pack),
 where Image Opt otherwise black-screened during loading.
 
+## Faster Game Loading: use the Preview build
+
+If you run [Faster Game Loading](https://steamcommunity.com/sharedfiles/filedetails/?id=3797541348), use **Faster Game Loading - Continued (Preview)**. It carries `ImageOptEarlyLoadCoordinator`, which stops FGL's early content loading from closing Image Opt's texture channel before loading finishes. Without it, Image Opt can black-screen at load.
+
+This can't be declared as a dependency: both FGL builds share the package id `Taranchuk.FasterGameLoading`, so `About.xml` can't tell them apart. The patch checks for the coordinator **by capability** at startup and warns in the log and on its settings page if it's missing. Not running FGL at all is also a supported setup.
+
+### Tested configuration
+
+Faster Game Loading (Preview) with **all settings at their defaults**:
+
+| Setting (as FGL saves it) | Default |
+|---|---|
+| `earlyModContentLoading` | on |
+| `enableMultiThreading` | on |
+| `XPathCaching` | on |
+| `delayGraphicLoading` | off |
+| `StaticAtlasesBaking` | off |
+
+The patch reads these at startup and warns if any differ. The warning says *untested*, not *broken*: no changed setting has been shown to break Image Opt, but none has been tried with it either.
+
+Note that FGL stores its config per **Workshop ID**, not per package ID. Switching between the official and Preview builds starts from a fresh config file with defaults.
+
 ## What it does
 
 | Feature | Problem it solves |
@@ -26,6 +48,8 @@ On one boot of the full Progression pack with Image Opt and this patch enabled:
 - GC pauses fell from 21 (74.9 s total) to 1 (2.6 s); the Prepatcher phase fell from 51.8 s to 6.1 s
 
 That's one machine and one mod list. Your numbers will differ.
+
+**Those numbers come from the build immediately before the rename to `ImageOptCompat`** — identical logic, but compiled against different references. This release build has not yet been run in-game.
 
 ## Known gaps — please read before relying on it
 

@@ -35,7 +35,11 @@
 
   <description>Compatibility patch FOR Image Opt - you still need Image Opt installed. It does not replace or modify Image Opt; it patches around it.
 
-Built and tested on a 1,478-mod list (the Progression pack) where Image Opt otherwise black-screened at load.
+IF YOU USE FASTER GAME LOADING: use 'Faster Game Loading - Continued (Preview)', not the regular build. The Preview carries an Image Opt compatibility layer; without it, Image Opt can black-screen during loading. Both builds share a package id, so this cannot be enforced as a dependency - the patch checks at startup and warns in the log and in its settings if the wrong build is active. Not using Faster Game Loading at all is also fine.
+
+TESTED CONFIGURATION: Faster Game Loading (Preview) with all of its settings at their defaults. The patch warns if any are changed - not because a change is known to break things, but because no other combination has been tested with Image Opt.
+
+Developed on a 1,478-mod list (the Progression pack), where Image Opt otherwise black-screened at load.
 
 WHAT IT DOES
 1. Vehicle readback fix - Vehicle Framework rebuilds vehicle liveries by reading and rewriting texture pixels. Image Opt's native textures live on the GPU and cannot serve a CPU read. Textures belonging to vehicle mods are replaced with CPU-readable copies.
@@ -49,5 +53,5 @@ KNOWN GAPS - please read
 - The vehicle list is hardcoded to ten mods. Other mods that read texture pixels may need adding.
 - Most fixes touch Unity types that the test suite cannot load, so they are verified by inspection, not by tests.
 
-Written with AI assistance and reviewed by a second independent AI reviewer. Source, known issues and the review notes are on GitHub. Fixes welcome - MIT licensed.</description>
+Written with AI assistance and reviewed by a second independent AI reviewer. Source and known issues are on GitHub. Fixes welcome - MIT licensed.</description>
 </ModMetaData>
