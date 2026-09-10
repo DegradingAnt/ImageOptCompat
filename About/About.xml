@@ -1,16 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ModMetaData>
-  <name>Image Opt Compatibility Patch</name>
+  <name>Image Opt + Faster Game Loading Compatibility Patch</name>
   <author>DegradingAnt</author>
   <packageId>degradingant.imageoptcompat</packageId>
   <url>https://github.com/DegradingAnt/ImageOptCompat</url>
   <supportedVersions><li>1.6</li></supportedVersions>
   <modVersion>0.2.0</modVersion>
 
-  <!-- Harmony is the ONLY hard dependency. Image Opt is deliberately NOT listed: this mod no-ops
-       without it, and a hard dependency would raise a missing-dependency error whenever Image Opt
-       is disabled - which is exactly when you are bisecting a load problem and need a clean boot. -->
+  <!-- Both mods this patches are REQUIRED - it is a patch for that combination. A missing dependency
+       shows a warning in the mod list but does not stop the game loading, so disabling one to bisect a
+       problem still works.
+       Faster Game Loading: the Preview and regular builds share the package id
+       Taranchuk.FasterGameLoading, so this entry cannot tell them apart. Its Workshop link points at
+       the Preview; the patch also checks at startup and warns if the wrong build is active. -->
   <modDependencies>
+    <li>
+      <packageId>dev.soeur.imageopt</packageId>
+      <displayName>Image Opt</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/3543873568</steamWorkshopUrl>
+    </li>
+    <li>
+      <packageId>Taranchuk.FasterGameLoading</packageId>
+      <displayName>Faster Game Loading - Continued (Preview)</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/3797541348</steamWorkshopUrl>
+    </li>
     <li>
       <packageId>brrainz.harmony</packageId>
       <displayName>Harmony</displayName>
@@ -33,25 +46,38 @@
     <li>Ludeon.RimWorld</li>
   </loadAfter>
 
-  <description>Compatibility patch FOR Image Opt - you still need Image Opt installed. It does not replace or modify Image Opt; it patches around it.
+  <description>Compatibility patch for running IMAGE OPT together with FASTER GAME LOADING - CONTINUED (PREVIEW).
+It needs BOTH of those mods installed. It does not replace or modify either one; it patches around them.
 
-IF YOU USE FASTER GAME LOADING: use 'Faster Game Loading - Continued (Preview)', not the regular build. The Preview carries an Image Opt compatibility layer; without it, Image Opt can black-screen during loading. Both builds share a package id, so this cannot be enforced as a dependency - the patch checks at startup and warns in the log and in its settings if the wrong build is active. Not using Faster Game Loading at all is also fine.
+Developed on a 1,478-mod list (the Progression pack), where this combination otherwise black-screened at load.
 
-TESTED CONFIGURATION: Faster Game Loading (Preview) with all of its settings at their defaults. The patch warns if any are changed - not because a change is known to break things, but because no other combination has been tested with Image Opt.
+REQUIRES
+- Image Opt (soeur)
+- Faster Game Loading - Continued (Preview). Use the Preview, not the regular build: the Preview carries the Image Opt compatibility layer this patch depends on. Both builds share a package id, so the mod list cannot enforce this - the patch checks at startup and warns if the wrong one is active.
 
-Developed on a 1,478-mod list (the Progression pack), where Image Opt otherwise black-screened at load.
+TESTED VERSIONS
+- Image Opt 0.1.13
+- Faster Game Loading - Continued (Preview) 2026.09.07.1, all settings at their defaults
+- Harmony 2.4.2 / RimWorld 1.6.4871
+Other versions may work. The patch warns if it sees one it was not tested with, because this patch reaches into both mods' internals and a renamed field would quietly switch parts of it off.
 
-WHAT IT DOES
-1. Vehicle readback fix - Vehicle Framework rebuilds vehicle liveries by reading and rewriting texture pixels. Image Opt's native textures live on the GPU and cannot serve a CPU read. Textures belonging to vehicle mods are replaced with CPU-readable copies.
-2. Early-load guards - Vanilla Expanded Framework and Worldbuilder touch data that is not ready yet during the pre-load screen. Image Opt lengthens that window enough to throw an exception every frame, which blanks the screen. Both are guarded until the data exists.
-3. Orphaned .dds.zstd sweep - removes Image Opt cache files whose source image no longer exists, which otherwise get served as stale textures. It only ever touches .dds.zstd, never plain .dds.
+FIXES FOR IMAGE OPT + FASTER GAME LOADING
+- Pixel-readback fix, for any mod - Image Opt's textures live on the GPU, so any mod reading texture pixels gets an error or blank data. The patch answers those reads from a CPU-readable copy. It covers every mod automatically rather than a fixed list.
+- Orphaned .dds.zstd sweep - removes Image Opt cache files whose source image has gone, which would otherwise show as stale textures. Never touches plain .dds.
+- Faster Game Loading checks - warns at startup if the regular build is active instead of the Preview, or if its settings differ from the tested defaults.
 
-Everything is a no-op when Image Opt is not active.
+ALSO PATCHES THESE OTHER MODS
+Each is only touched if it is installed. If it is not, that part does nothing.
+- Vehicle Framework (SmashPhil), plus Vanilla Vehicles Expanded, Vehicle Map Framework and other vehicle packs - vehicle liveries are built by reading texture pixels, which Image Opt breaks. The pixel-readback fix repairs them.
+- Vanilla Expanded Framework (Oskar Potocki) - its dev-tool opener reads a keybinding before the game's data is ready, which throws an error every frame on the loading screen. It is held back until that data exists.
+- Worldbuilder - reads its own settings before they have loaded, with the same result. It is held back until they exist.
 
 KNOWN GAPS - please read
-- The vehicle livery has not been visually confirmed. Textures convert without errors, but nobody has yet checked a turret on the paint page.
-- The vehicle list is hardcoded to ten mods. Other mods that read texture pixels may need adding.
-- Most fixes touch Unity types that the test suite cannot load, so they are verified by inspection, not by tests.
+- The vehicle livery has not been visually confirmed yet.
+- A mod calling the five-argument GetPixels overload directly is not covered - that one method is native and cannot be patched. The standard overloads are.
+- Most fixes touch Unity types the test suite cannot load, so they are verified by inspection, not by tests.
 
-Written with AI assistance and reviewed by a second independent AI reviewer. Source and known issues are on GitHub. Fixes welcome - MIT licensed.</description>
+Written with AI assistance and reviewed by a second, independent AI reviewer. Source and known issues on GitHub. MIT licensed, fixes welcome.
+
+The preview image is adapted from Image Opt's logo. If soeur or any other author whose work this touches would like anything changed or removed, ask and it will be done promptly.</description>
 </ModMetaData>

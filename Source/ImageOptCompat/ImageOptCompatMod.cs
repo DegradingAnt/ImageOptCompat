@@ -52,6 +52,7 @@ public sealed class ImageOptCompatMod : Mod
         harmony.PatchAll();
         CheckFasterGameLoading();
         if (FglHasImageOptSupport == true) CheckFglSettings();
+        CheckVersions();
         Log.Message("[ImageOptCompat] active alongside Image Opt.");
 
         // Sweep before textures are requested, so a stale file is never served.
@@ -102,6 +103,32 @@ public sealed class ImageOptCompatMod : Mod
                   + "If loading misbehaves, reset Faster Game Loading's settings to default first.");
     }
 
+    /// The versions this build was tested against. Reflection into Image Opt and FGL internals means a
+    /// renamed field in a newer version makes a feature silently no-op; this is the early signal.
+    /// modVersion from About.xml, NOT the assembly version: both authors leave that at a placeholder
+    /// (ImageOpt.dll 0.0.0.0, FasterGameLoading.dll 1.0.0.0), so it identifies nothing.
+    private const string TestedImageOpt = "0.1.13";
+    private const string TestedFgl = "2026.09.07.1";
+
+    public static string? UntestedVersions { get; private set; }
+
+    private static void CheckVersions()
+    {
+        var notes = new List<string>();
+        Compare("dev.soeur.imageopt", "Image Opt", TestedImageOpt, notes);
+        Compare("Taranchuk.FasterGameLoading", "Faster Game Loading", TestedFgl, notes);
+        UntestedVersions = notes.Count == 0 ? null : string.Join("; ", notes);
+    }
+
+    private static void Compare(string packageId, string label, string tested, List<string> notes)
+    {
+        var version = ModLister.GetActiveModWithIdentifier(packageId, ignorePostfix: true)?.ModVersion;
+        if (string.IsNullOrEmpty(version) || string.Equals(version, tested, StringComparison.Ordinal)) return;
+        notes.Add($"{label} {version} (tested {tested})");
+        Log.Warning($"[ImageOptCompat] {label} is version {version}; this patch was tested with {tested}. "
+                  + "It may still work, but an untested version can silently disable parts of this patch.");
+    }
+
     public override string SettingsCategory() => "ImageOptCompat";
 
     public override void DoSettingsWindowContents(Rect inRect)
@@ -117,6 +144,8 @@ public sealed class ImageOptCompatMod : Mod
             true  => "Faster Game Loading: compatible build detected.",
             false => "WARNING: Faster Game Loading lacks Image Opt support - use the Preview build.",
         });
+        if (UntestedVersions != null)
+            l.Label($"Untested versions: {UntestedVersions}");
         if (FglUntestedSettings != null)
             l.Label($"Faster Game Loading settings differ from the tested defaults: {FglUntestedSettings}");
         l.GapLine();

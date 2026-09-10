@@ -91,7 +91,7 @@ public static class VehicleReadback
     /// Blit through a RenderTexture and ReadPixels back. Unlike Graphics.CopyTexture (a GPU-side
     /// copy that leaves the destination's CPU buffer empty) this actually populates it.
     /// Returns null on failure so the caller keeps the original.
-    private static Texture2D? ToCpuReadable(Texture2D src)
+    internal static Texture2D? ToCpuReadable(Texture2D src)
     {
         // REVIEW #2: captured BEFORE the try. If the exception came from `src` being an invalid
         // Unity object, reading src.name inside the catch throws again and the caller gets an

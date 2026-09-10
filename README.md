@@ -1,16 +1,32 @@
-# Image Opt Compatibility Patch
+# Image Opt + Faster Game Loading Compatibility Patch
 
-A RimWorld 1.6 compatibility patch **for** [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568) by soeur.
-You still need Image Opt installed — this patches around it and does not replace or modify it.
+A RimWorld 1.6 compatibility patch for running [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568) together with
+[Faster Game Loading - Continued (Preview)](https://steamcommunity.com/sharedfiles/filedetails/?id=3797541348).
+**It needs both of those mods installed.** It patches around them and does not replace or modify either.
 
 It was built to make Image Opt usable on a very large mod list (the ~1,478-mod Progression pack),
 where Image Opt otherwise black-screened during loading.
+
+## Tested versions
+
+| Mod | Version |
+|---|---|
+| Image Opt | `0.1.13` |
+| Faster Game Loading - Continued (Preview) | `2026.09.07.1`, all settings default |
+| Harmony | `2.4.2` |
+| RimWorld | `1.6.4871` |
+
+The patch reads each mod's `modVersion` at startup and warns about any it wasn't tested with. It reads
+`modVersion` rather than the assembly version because both authors leave the assembly version at a
+placeholder (`0.0.0.0` and `1.0.0.0`), which identifies nothing. The check matters because the patch
+reflects into both mods' internals: a renamed field in a newer version would otherwise switch parts of it
+off silently.
 
 ## Faster Game Loading: use the Preview build
 
 If you run [Faster Game Loading](https://steamcommunity.com/sharedfiles/filedetails/?id=3797541348), use **Faster Game Loading - Continued (Preview)**. It carries `ImageOptEarlyLoadCoordinator`, which stops FGL's early content loading from closing Image Opt's texture channel before loading finishes. Without it, Image Opt can black-screen at load.
 
-This can't be declared as a dependency: both FGL builds share the package id `Taranchuk.FasterGameLoading`, so `About.xml` can't tell them apart. The patch checks for the coordinator **by capability** at startup and warns in the log and on its settings page if it's missing. Not running FGL at all is also a supported setup.
+This can't be declared as a dependency: both FGL builds share the package id `Taranchuk.FasterGameLoading`, so `About.xml` can't tell them apart. The patch checks for the coordinator **by capability** at startup and warns in the log and on its settings page if it's missing. 
 
 ### Tested configuration
 
@@ -37,6 +53,21 @@ Note that FGL stores its config per **Workshop ID**, not per package ID. Switchi
 | **Orphan sweep** | Removes Image Opt `.dds.zstd` cache files whose source image has gone, which would otherwise be served as stale textures. It **never** touches plain `.dds` — mods ship those deliberately. |
 
 Everything is a no-op when Image Opt isn't active, so disabling Image Opt to track down a problem still gives you a clean boot.
+
+## Also patches these other mods
+
+Beyond the Image Opt + Faster Game Loading pairing, this patch reaches into three other mods. Each part
+only runs if that mod is installed, and is a no-op otherwise.
+
+| Mod | What's patched | Why |
+|---|---|---|
+| **Vehicle Framework** (SmashPhil), Vanilla Vehicles Expanded, Vehicle Map Framework, other vehicle packs | Texture pixel reads | Liveries are built by reading texture pixels, which Image Opt's GPU-only textures break |
+| **Vanilla Expanded Framework** (Oskar Potocki) | `VanillaExpandedFramework_DebugWindowsOpener_DevToolStarterOnGUI_Patch.Prefix` | Reads a `KeyBindingDef` before DefOfs initialise, throwing every frame on the loading screen |
+| **Worldbuilder** | `Rand_EnsureStateStackEmpty_Patch.Prefix` | Reads `WorldbuilderMod.settings` before settings load, with the same result |
+
+The VEF and Worldbuilder guards skip those mods' own patches until the data they need exists. For
+Worldbuilder the guard also sets the return value so that RimWorld's own `Rand.EnsureStateStackEmpty`
+still runs, since skipping it would break more than it fixes.
 
 ## Measured results
 
@@ -85,6 +116,11 @@ That's said openly so you can weight it appropriately. The gaps above are real a
 - **soeur** — [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568). This patch only exists because Image Opt ships its source.
 - **Green_Mushroom** — Faster Game Loading (Preview), whose Image Opt compatibility layer this relies on.
 - **ferny** and the Progression pack maintainers.
+
+## Takedown
+
+The preview image is adapted from Image Opt's logo. If soeur, or any author whose work this touches,
+would like anything changed or removed, open an issue or ask on the Workshop page and it will be done promptly.
 
 ## Licence
 
