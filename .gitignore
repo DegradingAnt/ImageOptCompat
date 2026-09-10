@@ -1,0 +1,10 @@
+# build output
+bin/
+obj/
+*.pdb
+# local test scratch
+TestResults/
+# IDE
+.vs/
+.vscode/
+*.user

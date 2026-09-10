@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <name>Image Opt Compatibility Patch</name>
+  <author>DegradingAnt</author>
+  <packageId>degradingant.imageoptcompat</packageId>
+  <url>https://github.com/DegradingAnt/ImageOptCompat</url>
+  <supportedVersions><li>1.6</li></supportedVersions>
+  <modVersion>0.2.0</modVersion>
+
+  <!-- Harmony is the ONLY hard dependency. Image Opt is deliberately NOT listed: this mod no-ops
+       without it, and a hard dependency would raise a missing-dependency error whenever Image Opt
+       is disabled - which is exactly when you are bisecting a load problem and need a clean boot. -->
+  <modDependencies>
+    <li>
+      <packageId>brrainz.harmony</packageId>
+      <displayName>Harmony</displayName>
+      <steamWorkshopUrl>steam://url/CommunityFilePage/2009463077</steamWorkshopUrl>
+      <downloadUrl>https://github.com/pardeike/HarmonyRimWorld/releases/latest</downloadUrl>
+    </li>
+  </modDependencies>
+
+  <!-- For SORTING, forceLoadAfter and loadAfter are identical: Verse.ModsConfig.TrySortMods
+       concatenates LoadAfter and ForceLoadAfter into the same graph edges before its topological
+       sort. The force- form is kept because the mod list flags a violation of it more visibly. -->
+  <forceLoadAfter>
+    <li>brrainz.harmony</li>
+    <li>zetrith.prepatcher</li>
+    <li>Taranchuk.FasterGameLoading</li>
+    <li>dev.soeur.imageopt</li>
+  </forceLoadAfter>
+
+  <loadAfter>
+    <li>Ludeon.RimWorld</li>
+  </loadAfter>
+
+  <description>Compatibility patch FOR Image Opt - you still need Image Opt installed. It does not replace or modify Image Opt; it patches around it.
+
+Built and tested on a 1,478-mod list (the Progression pack) where Image Opt otherwise black-screened at load.
+
+WHAT IT DOES
+1. Vehicle readback fix - Vehicle Framework rebuilds vehicle liveries by reading and rewriting texture pixels. Image Opt's native textures live on the GPU and cannot serve a CPU read. Textures belonging to vehicle mods are replaced with CPU-readable copies.
+2. Early-load guards - Vanilla Expanded Framework and Worldbuilder touch data that is not ready yet during the pre-load screen. Image Opt lengthens that window enough to throw an exception every frame, which blanks the screen. Both are guarded until the data exists.
+3. Orphaned .dds.zstd sweep - removes Image Opt cache files whose source image no longer exists, which otherwise get served as stale textures. It only ever touches .dds.zstd, never plain .dds.
+
+Everything is a no-op when Image Opt is not active.
+
+KNOWN GAPS - please read
+- The vehicle livery has not been visually confirmed. Textures convert without errors, but nobody has yet checked a turret on the paint page.
+- The vehicle list is hardcoded to ten mods. Other mods that read texture pixels may need adding.
+- Most fixes touch Unity types that the test suite cannot load, so they are verified by inspection, not by tests.
+
+Written with AI assistance and reviewed by a second independent AI reviewer. Source, known issues and the review notes are on GitHub. Fixes welcome - MIT licensed.</description>
+</ModMetaData>
