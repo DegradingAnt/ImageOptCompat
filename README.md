@@ -114,13 +114,16 @@ That's said openly so you can weight it appropriately. The gaps above are real a
 ## Credits
 
 - **soeur** — [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568). This patch only exists because Image Opt ships its source.
+- **Taranchuk** — original author of Faster Game Loading. Its art, used in the preview image, is
+  Copyright (c) 2022 Taranchuk under the MIT licence.
 - **Green_Mushroom** — Faster Game Loading (Preview), whose Image Opt compatibility layer this relies on.
 - **ferny** and the Progression pack maintainers.
 
 ## Takedown
 
-The preview image is adapted from Image Opt's logo. If soeur, or any author whose work this touches,
-would like anything changed or removed, open an issue or ask on the Workshop page and it will be done promptly.
+The preview image combines art from Image Opt (soeur) and Faster Game Loading. If soeur, Taranchuk,
+Green_Mushroom, or any author whose work this touches would like anything changed or removed, open an
+issue or ask on the Workshop page and it will be done promptly.
 
 ## Licence
 
