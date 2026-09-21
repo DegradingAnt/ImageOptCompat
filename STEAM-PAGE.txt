@@ -1,0 +1,84 @@
+TITLE
+Image Opt + Faster Game Loading Compatibility Patch
+
+DESCRIPTION (Steam BBCode)
+
+A patch for using [b]Image Opt[/b] and [b]Faster Game Loading[/b] together. It grew out of troubleshooting loading and texture problems in a large Progression mod list.
+
+It helps other mods read Image Opt's textures, handles a few loading-screen errors, and stops missing textures from filling the log with the same warning every frame.
+
+[h1]What you need[/h1]
+[list]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=2009463077]Harmony[/url]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568]Image Opt[/url]
+[*][url=https://steamcommunity.com/sharedfiles/filedetails/?id=3797541348]Faster Game Loading - Continued (Preview)[/url]
+[/list]
+
+Use the [b]Preview[/b] version of Faster Game Loading and load this patch after all three. The patch will warn you if the required Image Opt support is missing from your FGL build.
+
+Made for [b]RimWorld 1.6 on Windows[/b].
+
+[h1]What it fixes[/h1]
+[list]
+[*]Texture-reading problems that can affect vehicle paint, liveries and other mod graphics. Includes support for Vehicle Framework, Vanilla Vehicles Expanded and Vehicle Map Framework.
+[*]Loading-screen errors from Vanilla Expanded Framework and Worldbuilder trying to use data before it is ready.
+[*]Missing textures caused by mods picking up Image Opt's cache files when scanning their texture folders. Holograms and Projectors is one example.
+[*]Repeated "null texture passed to GUI.DrawTexture" warnings. Missing textures stay invisible by default, with an optional magenta marker to help find them.
+[/list]
+
+It also cleans up leftover Image Opt caches when their source images are gone. Plain .dds files are left alone.
+
+[h1]Settings and troubleshooting[/h1]
+Every fix has its own switch. If something looks wrong, you can turn fixes off individually to narrow it down. Some changes need a restart; the settings explain which ones.
+
+For a missing-texture problem, enable [b]Report missing textures[/b] and use the button to copy a report. Include that report and your mod list when reporting the issue. The more detailed draw diagnostic is slower, so leave it off during normal play.
+
+[h1]Credits[/h1]
+Thanks to soeur for Image Opt, Taranchuk for the original Faster Game Loading, and Green_Mushroom for the continued Preview build.
+
+MIT licensed. Made with AI assistance and reviewed with Codex.
+
+The preview uses artwork from Image Opt and Faster Game Loading. Faster Game Loading artwork is Copyright (c) 2022 Taranchuk, used under the MIT licence. If an author would like their artwork changed or removed, please get in touch.
+
+[h1]Technical notes[/h1]
+[b]Texture reads and vehicles[/b]
+The generic fix intercepts seven managed Texture2D read overloads and uses cached CPU-readable copies of Image Opt textures. Vehicle textures are also converted in advance for ten supported packages. Copies are released during content teardown and recreated if destroyed.
+
+Readback requires the main thread. Direct calls to the native five-argument GetPixels overload are not covered; Image Opt handles GetPixels32 itself. Original Image Opt textures are retained by default because their native memory belongs to Image Opt. Destroying them is an advanced, opt-in setting.
+
+[b]Path correction and cache cleanup[/b]
+A folder scan can turn name.dds.zstd into the invalid content path name.dds. After that lookup fails, the patch tries name once. It leaves successful lookups alone and only repairs paths while Image Opt is active. It does not deduplicate another mod's file list or remove the error already logged by the first lookup.
+
+The orphan sweep checks active mods' resolved texture folders and removes .dds.zstd files with no matching PNG, JPG or JPEG source.
+
+[b]Loading guards and diagnostics[/b]
+The VEF guard waits for its dev-tool keybinding. The Worldbuilder guard waits for its settings while allowing vanilla RNG cleanup to continue. These guards and the null-texture guard remain available when Image Opt is disabled for troubleshooting.
+
+The null guard skips invalid repaint draws rather than substituting a transparent texture, which could still be visible with alpha blending disabled. Normal diagnostics sample the first eight intercepted draws. Deep diagnostics inspect every intercepted draw, with bounded reporting storage.
+
+Missing-texture recording is off by default and excludes optional existence checks. Reports include the requesting def and mod where available. A draw report may identify a shared UI helper rather than the mod that originally supplied the missing texture.
+
+[b]Versions and testing[/b]
+Checked against RimWorld 1.6.4871, Harmony 2.4.2, Image Opt 0.1.13 and Faster Game Loading Preview 2026.09.07.1 with FGL's default settings. FGL's regular and Preview builds share a package ID, so the patch checks for the loading coordinator itself.
+
+The reviewed Release build passes 109 automated tests. These include installed-mod API checks and logic tests with Unity stand-ins; actual rendering and full mod-pack compatibility need in-game testing. Final boot testing is currently in progress.
+
+One inspected log contained 222,128 repeated null-texture warnings. No TPS improvement has been measured for this build, and results will depend on what is slowing down your game.
+
+-------------------------------------------------------------------------------
+PUBLISHING NOTES — NOT PART OF THE PUBLIC DESCRIPTION
+-------------------------------------------------------------------------------
+Status: DRAFT. Do not publish until Ant reports a green boot test for the installed
+Release DLL, SHA256 5B5325EF575667AAC0289F4F66B81A077F03236DD59B2B79D52ECE02B8F8CD60.
+
+After the boot result, add a short factual in-game validation sentence. Specify
+what was actually checked: menu/save load, vehicle livery/turret, holograms,
+settings/report controls, and repeated warning counts. Do not invent a TPS gain.
+
+Required Workshop items: 2009463077, 3543873568, 3797541348.
+Suggested tags: 1.6, Utility, Performance (subject to the Workshop's choices).
+Preview: About/Preview.png, 994,639 bytes. Existing artwork was retained.
+Add the actual public source URL after the repository is published; do not claim
+that an unpublished GitHub repository is already available.
+Upload only release mod content. Exclude bin/obj/TestResults, boot backups,
+validation fixtures, local manifests and these internal publishing notes.

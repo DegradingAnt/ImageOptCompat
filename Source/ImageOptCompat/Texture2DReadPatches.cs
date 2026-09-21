@@ -30,7 +30,10 @@ internal static class Texture2DReadPatches
 {
     private static HashSet<int>? nativeIds;
     private static bool resolved;
-    private static readonly ConditionalWeakTable<Texture2D, Texture2D> Copies = new();
+    private static ConditionalWeakTable<Texture2D, Texture2D> Copies = new();
+    // Unity native storage outlives managed GC. Own copies until content teardown even
+    // when a weak source key is collected; never take ownership of Image Opt's sources.
+    private static readonly HashSet<Texture2D> OwnedCopies = new();
 
     internal static int Served { get; private set; }
 
@@ -53,16 +56,66 @@ internal static class Texture2DReadPatches
     /// A CPU-readable stand-in for an Image Opt native texture, or null to let the original run.
     internal static Texture2D? Readable(Texture2D tex)
     {
+        // Returning null makes every one of the seven prefixes fall through to Unity's original
+        // method, so the fix goes inert without unpatching. The patches stay installed: this is a
+        // troubleshooting switch, and leaving the wiring in place is what makes it reversible
+        // without a restart.
+        if (!ImageOptCompatMod.Settings.genericPixelReadback) return null;
+
         if (tex == null || !UnityData.IsInMainThread) return null;   // Blit/ReadPixels are main-thread only
         var ids = NativeIds();
         if (ids == null || !ids.Contains(tex.GetInstanceID())) return null;
-        if (Copies.TryGetValue(tex, out var cached)) return cached;   // GetPixel is called per-pixel in loops
+        if (Copies.TryGetValue(tex, out var cached))
+        {
+            if (cached != null) return cached;   // GetPixel is called per-pixel in loops
+            Copies.Remove(tex);
+
+            // The two null tests above and below are DELIBERATELY different operators, and the
+            // difference is the whole point. `!= null` is Unity's overload: false for a DESTROYED
+            // texture as well as a null reference. `is not null` is a plain reference test, which
+            // is still TRUE for a destroyed object - which is precisely the case that reaches here
+            // and the entry we must drop from OwnedCopies.
+            // CA1508 flags this as dead code because the analyzer models `!= null` as a reference
+            // comparison and cannot see Unity's operator. Suppressed, not rewritten: rewriting it
+            // to satisfy the analyzer would leak every destroyed copy.
+#pragma warning disable CA1508
+            if (cached is not null) OwnedCopies.Remove(cached);
+#pragma warning restore CA1508
+        }
 
         var copy = VehicleReadback.ToCpuReadable(tex);
         if (copy == null) return null;
         Copies.Add(tex, copy);
+        OwnedCopies.Add(copy);
         Served++;
         return copy;
+    }
+
+    internal static void ClearCopies()
+    {
+        if (!UnityData.IsInMainThread)
+        {
+            // ExecuteWhenFinished can run immediately on its caller's thread.
+            LongEventHandler.QueueLongEvent(ClearCopies, null, false, null);
+            return;
+        }
+
+        foreach (var copy in OwnedCopies)
+        {
+            try { if (copy != null) UnityEngine.Object.DestroyImmediate(copy); }
+            catch (Exception e) { Log.Warning($"[ImageOptCompat] cached texture cleanup failed: {e.Message}"); }
+        }
+        OwnedCopies.Clear();
+        Copies = new ConditionalWeakTable<Texture2D, Texture2D>();
+        nativeIds = null;
+        resolved = false;
+        Served = 0;
+    }
+
+    [HarmonyPatch(typeof(PlayDataLoader), nameof(PlayDataLoader.ClearAllPlayData))]
+    internal static class ClearPlayData
+    {
+        public static void Prefix() => ClearCopies();
     }
 
     // Parameter names below MUST match UnityEngine's exactly - Harmony binds by name. Note the

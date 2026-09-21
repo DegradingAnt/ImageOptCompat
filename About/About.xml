@@ -46,6 +46,13 @@
     <li>Ludeon.RimWorld</li>
   </loadAfter>
 
+  <!-- Sarcho Turtle references Core's AnimalThingBase, AnimalKindBase and egg bases.
+       Its package can otherwise sort ahead of Core in large load orders, leaving those
+       parents unresolved and producing ThingDefs with null thingClass fields. -->
+  <loadBefore>
+    <li>zal.sarchoturtle</li>
+  </loadBefore>
+
   <description>Compatibility patch for running IMAGE OPT together with FASTER GAME LOADING - CONTINUED (PREVIEW).
 It needs BOTH of those mods installed. It does not replace or modify either one; it patches around them.
 
@@ -63,21 +70,27 @@ Other versions may work. The patch warns if it sees one it was not tested with, 
 
 FIXES FOR IMAGE OPT + FASTER GAME LOADING
 - Pixel-readback fix, for any mod - Image Opt's textures live on the GPU, so any mod reading texture pixels gets an error or blank data. The patch answers those reads from a CPU-readable copy. It covers every mod automatically rather than a fixed list.
+- Double-extension texture paths - Image Opt saves its cache next to the image as "name.dds.zstd". A mod that builds its texture paths by scanning its own folder strips one extension and gets "name.dds", then asks the game for a file that does not exist. The texture comes back empty and Unity logs a warning on every frame it is drawn. Measured on one mod in a 1,484-mod list: 60 broken paths, 60 empty materials and 222,128 log lines in a single session. The patch retries the correct path. It only runs after a lookup has already failed, so it cannot change a result that worked.
 - Orphaned .dds.zstd sweep - removes Image Opt cache files whose source image has gone, which would otherwise show as stale textures. Never touches plain .dds.
 - Faster Game Loading checks - warns at startup if the regular build is active instead of the Preview, or if its settings differ from the tested defaults.
 
+FIXES THAT WORK WITHOUT IMAGE OPT
+These are not Image Opt faults. They stay on even when Image Opt is inactive, and each can be switched off in the mod settings.
+- Null-texture guard - Unity writes "null texture passed to GUI.DrawTexture" every time a mod hands it a missing or destroyed texture. Unity writes that line itself, so the game's own repeat-message filter never sees it and it is written once per call, every frame, for the whole session. On a 1,484-mod load it was measured at 222,128 lines in one session, which is 94 percent of the entire log. Drawing and ticking share one thread, so the cost comes out of tick rate and appears as stutter and low TPS above 1x speed, while 1x looks fine. The patch skips invalid repaint draws by default, preserving the empty appearance even when alpha blending is disabled. It samples the first eight intercepted draws and reports distinct observed callers from that sample. An optional magenta placeholder makes missing textures visible, and an opt-in deep diagnostic collects per-caller counts.
+
 ALSO PATCHES THESE OTHER MODS
 Each is only touched if it is installed. If it is not, that part does nothing.
-- Vehicle Framework (SmashPhil), plus Vanilla Vehicles Expanded, Vehicle Map Framework and other vehicle packs - vehicle liveries are built by reading texture pixels, which Image Opt breaks. The pixel-readback fix repairs them.
+- Vehicle Framework (SmashPhil), plus Vanilla Vehicles Expanded, Vehicle Map Framework and other vehicle packs - vehicle liveries are built by reading texture pixels, which Image Opt breaks. The pixel-readback fix is intended to address this; final livery appearance still requires an in-game check.
 - Vanilla Expanded Framework (Oskar Potocki) - its dev-tool opener reads a keybinding before the game's data is ready, which throws an error every frame on the loading screen. It is held back until that data exists.
 - Worldbuilder - reads its own settings before they have loaded, with the same result. It is held back until they exist.
 
 KNOWN GAPS - please read
 - The vehicle livery has not been visually confirmed yet.
 - A mod calling the five-argument GetPixels overload directly is not covered - that one method is native and cannot be patched. The standard overloads are.
-- Most fixes touch Unity types the test suite cannot load, so they are verified by inspection, not by tests.
+- The null-texture guard has not yet been confirmed in a running game. It is covered by tests and the patch targets are checked against the installed game's own assemblies, but the measured before-and-after log count is still to come.
+- Parts that need a live Unity object, such as the pixel copy itself, cannot run in the test suite. The names every patch binds to are checked against the installed game's assemblies, so a renamed method or argument fails a test instead of quietly switching a fix off.
 
-Written with AI assistance and reviewed by a second, independent AI reviewer. Source and known issues on GitHub. MIT licensed, fixes welcome.
+Written with AI assistance and independently reviewed with Codex. MIT licensed, fixes welcome. The current Release build passes 109 automated tests; live boot validation and publication are pending.
 
 The preview image combines art from Image Opt (soeur) and Faster Game Loading (Copyright (c) 2022 Taranchuk, MIT licence). If soeur, Taranchuk, Green_Mushroom or any other author whose work this touches would like anything changed or removed, ask and it will be done promptly.</description>
 </ModMetaData>

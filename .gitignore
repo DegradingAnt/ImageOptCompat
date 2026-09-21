@@ -4,6 +4,7 @@ obj/
 *.pdb
 # local test scratch
 TestResults/
+boot-backup-*/
 # IDE
 .vs/
 .vscode/

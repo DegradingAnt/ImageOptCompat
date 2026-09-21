@@ -113,13 +113,12 @@ public static class VehicleReadback
             Graphics.Blit(src, rt);
             RenderTexture.active = rt;
 
-            dst = new Texture2D(src.width, src.height, TextureFormat.RGBA32, mip)
-            {
-                name = src.name,
-                filterMode = src.filterMode,
-                wrapMode = src.wrapMode,
-                anisoLevel = src.anisoLevel,
-            };
+            // Assign ownership before reading any Unity properties, which may throw.
+            dst = new Texture2D(src.width, src.height, TextureFormat.RGBA32, mip);
+            dst.name = src.name;
+            dst.filterMode = src.filterMode;
+            dst.wrapMode = src.wrapMode;
+            dst.anisoLevel = src.anisoLevel;
             dst.ReadPixels(new Rect(0f, 0f, rt.width, rt.height), 0, 0);
             dst.Apply(mip, false);   // makeNoLongerReadable:false is the entire point
 

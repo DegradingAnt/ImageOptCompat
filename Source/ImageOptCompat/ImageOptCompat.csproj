@@ -5,8 +5,6 @@
     <RootNamespace>ImageOptCompat</RootNamespace>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <OutputPath>..\..\Assemblies\</OutputPath>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <DebugType>none</DebugType>
     <!-- the free equivalent of the static analysis that caught FGL's defect classes -->
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
@@ -24,4 +22,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
   </ItemGroup>
+  <Target Name="PackageRelease" DependsOnTargets="Build">
+    <Error Condition="'$(Configuration)' != 'Release'" Text="Only Release builds may be packaged." />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(MSBuildProjectDirectory)\..\..\Assemblies" />
+  </Target>
 </Project>

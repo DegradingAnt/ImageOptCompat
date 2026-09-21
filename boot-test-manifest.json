@@ -1,0 +1,13 @@
+{
+  "assemblySha256": "5B5325EF575667AAC0289F4F66B81A077F03236DD59B2B79D52ECE02B8F8CD60",
+  "configuration": "Release",
+  "unitAndContractTests": 85,
+  "sourceLogicTests": 24,
+  "totalTests": 109,
+  "testsSkipped": 0,
+  "productionWarnings": 0,
+  "previewBytes": 994639,
+  "validatedUtc": "2026-09-21T19:39:42.8922779Z",
+  "bootTest": "pending-user-result",
+  "publishing": "on-hold-until-green-boot"
+}

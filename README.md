@@ -44,15 +44,31 @@ The patch reads these at startup and warns if any differ. The warning says *unte
 
 Note that FGL stores its config per **Workshop ID**, not per package ID. Switching between the official and Preview builds starts from a fresh config file with defaults.
 
+## If RimWorld opens on the wrong monitor
+
+Unity chooses the display before RimWorld loads its mods, so a compatibility patch cannot reliably correct the window during startup. In Steam, open **Properties → General → Launch Options** and add:
+
+```text
+-monitor 1
+```
+
+Unity numbers monitors from 1, so `1` selects the primary display. Fully exit RimWorld before testing the option; it is applied on the next process launch and is also used when RimWorld restarts itself.
+
 ## What it does
 
 | Feature | Problem it solves |
 |---|---|
+| **Generic pixel readback** | Seven managed Texture2D read overloads use cached CPU-readable copies for Image Opt textures, including textures outside the vehicle list. Copies are released during content teardown and recreated if destroyed. |
 | **Vehicle readback** | Vehicle Framework rebuilds liveries by reading and rewriting texture pixels. Image Opt's textures live on the GPU and can't serve a CPU read. Textures from vehicle mods are swapped for CPU-readable copies. |
 | **Early-load guards** | Vanilla Expanded Framework and Worldbuilder read data that isn't ready yet on the pre-load screen. Image Opt lengthens that window enough to throw every frame, which blanks the screen. Both are held back until the data exists. |
-| **Orphan sweep** | Removes Image Opt `.dds.zstd` cache files whose source image has gone, which would otherwise be served as stale textures. It **never** touches plain `.dds` — mods ship those deliberately. |
+| **Orphan sweep** | Removes Image Opt `.dds.zstd` cache files whose source image has gone, which would otherwise be served as stale textures. It **never** touches plain `.dds` - mods ship those deliberately. |
+| **Double-extension path fix** | Image Opt caches as `name.dds.zstd`. A mod that builds texture paths by scanning its own folder calls `Path.GetFileNameWithoutExtension`, which strips only the **last** extension - yielding `name.dds`, a content path that resolves to nothing. Measured cause of the flood below: **Holograms And Projectors** (`Vesper.HologramsAndProjectors`) → 60 dead paths → 60 null-texture materials → 222,128 warnings. Retries the corrected path, and only ever after a lookup has already failed. |
+| **Missing-texture report** | Opt-in. Records every texture a def asked for that doesn't resolve, with the def and the owning mod, and copies a paste-ready report to the clipboard. Off by default - it patches `ContentFinder`. |
+| **Null-texture guard** | Unity logs `null texture passed to GUI.DrawTexture` once per call with no deduplication - Unity emits it itself, so RimWorld's repeat filter never sees it. Measured at **222,128 lines in one session, 94% of a 236,731-line log**. Drawing and ticking share a thread, so it costs tick rate and shows as stutter above 1× while 1× looks fine. Substitutes a **transparent** 1x1 by default, so the screen stays pixel-identical: a null draws nothing today, and `BadTex` would paint magenta over 222k draws. `BadTex` is available as an opt-in diagnostic. Names the first 8 distinct callers once each, with the owning mod. |
 
-Everything is a no-op when Image Opt isn't active, so disabling Image Opt to track down a problem still gives you a clean boot.
+Texture fixes and the orphan sweep are disabled when Image Opt is inactive. The early-UI guards and the null-texture guard remain active: neither problem is Image Opt's doing, and both cost frame time regardless.
+
+One terminal overload is patched for each of `GUI.DrawTexture` and `GUI.DrawTextureWithTexCoords`. Unity's public overloads are pure forwarders into one 12-argument internal method that holds the null check; patching every link would run the prefix three or four times per draw to reach a check that exists once. `UnityApiContractTests` pins that arity so a Unity restructure fails a test rather than silently no-opping.
 
 ## Also patches these other mods
 
@@ -80,13 +96,14 @@ On one boot of the full Progression pack with Image Opt and this patch enabled:
 
 That's one machine and one mod list. Your numbers will differ.
 
-**Those numbers come from the build immediately before the rename to `ImageOptCompat`** — identical logic, but compiled against different references. This release build has not yet been run in-game.
+**Those numbers come from an earlier build.** The generic readback cache, its cleanup and the configuration checks have since changed. These measurements do not validate the current release, which still needs its final in-game boot test.
 
-## Known gaps — please read before relying on it
+## Known gaps - please read before relying on it
 
 - **The vehicle livery has not been visually confirmed.** Textures convert without error, but no one has yet opened a vehicle paint page and checked the turret. This is the fix the patch exists for, and it's unverified.
-- **The vehicle list is hardcoded to ten mods.** Around 67 mods in a large pack reference pixel-reading APIs. Others may need adding to `VehicleReadback.cs`.
-- **Most fixes touch Unity types the tests can't load.** The 19 unit tests cover the pure decision logic only. The rest is verified by reading the compiled IL, not by tests.
+- **Proactive vehicle conversion covers ten mods.** Generic readback additionally handles other Image Opt textures on the main thread. Direct calls to the native five-argument GetPixels overload remain uncovered.
+- **Real Unity rendering still needs testing.** The 80 unit tests cover pure decisions, settings reflection and the path-correction rule, using explicit Unity stand-ins. `UnityApiContractTests` reads the installed game's own assemblies as metadata to verify every name each patch binds to, but nothing here executes GPU operations or Harmony detours.
+- **The null-texture guard has not run in a live game.** Its rules are covered by tests, and four planted defects were each caught by the suite, but the before-and-after log count that would prove the flood stops is still outstanding.
 - **The original Image Opt textures are not freed by default** (see `destroyOriginalTexture`). They wrap memory that Image Opt's native library still owns.
 
 If you can check any of these, a report is the most useful thing you can send.
@@ -94,13 +111,13 @@ If you can check any of these, a report is the most useful thing you can send.
 ## Building
 
 ```bash
-cd Source/ImageOptCompat
-dotnet build -c Release            # output goes to ../../Assemblies/
-cd ../ImageOptCompat.Tests
-dotnet test
+dotnet test Source/ImageOptCompat.Tests/ImageOptCompat.Tests.csproj -c Release
+dotnet test Source/ImageOptCompat.LogicTests/ImageOptCompat.LogicTests.csproj -c Release
+dotnet build Source/ImageOptCompat/ImageOptCompat.csproj -c Release -t:PackageRelease --no-restore
 ```
 
 References come from NuGet (`Krafs.Rimworld.Ref`, `Lib.Harmony`), so a local RimWorld install isn't needed to build.
+Run these commands from the repository root. Builds use separate bin/Debug and bin/Release directories. Only the explicit PackageRelease target copies a DLL into Assemblies; Debug packaging is rejected, and ordinary tests cannot overwrite the packaged DLL.
 Analysers are on (`AnalysisMode=All` plus Meziantou.Analyzer) and the build is expected to be warning-free.
 
 ## How this was made
@@ -113,10 +130,10 @@ That's said openly so you can weight it appropriately. The gaps above are real a
 
 ## Credits
 
-- **soeur** — [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568). This patch only exists because Image Opt ships its source.
-- **Taranchuk** — original author of Faster Game Loading. Its art, used in the preview image, is
+- **soeur** - [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568). This patch only exists because Image Opt ships its source.
+- **Taranchuk** - original author of Faster Game Loading. Its art, used in the preview image, is
   Copyright (c) 2022 Taranchuk under the MIT licence.
-- **Green_Mushroom** — Faster Game Loading (Preview), whose Image Opt compatibility layer this relies on.
+- **Green_Mushroom** - Faster Game Loading (Preview), whose Image Opt compatibility layer this relies on.
 - **ferny** and the Progression pack maintainers.
 
 ## Takedown
@@ -127,4 +144,22 @@ issue or ask on the Workshop page and it will be done promptly.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). Fixes and pull requests welcome.
+MIT - see [LICENSE](LICENSE). Fixes and pull requests welcome.
+
+## Review of the current boot-test build
+
+See [REVIEW-2026-09-21.md](REVIEW-2026-09-21.md) for the corrected logic issues,
+installed-mod checks and exact boot-test DLL hash. All 109 automated tests pass;
+the production analyzer rebuild has zero warnings and errors. The existing
+cross-framework test reference still produces NU1702.
+
+The settings page now scrolls. Missing-texture recording honors its switch and
+ignores optional existence probes. Path repair runs only with Image Opt active,
+retries once, and does not record its own fallback probe. It does not deduplicate
+another mod's directory scan or suppress an error already logged by the original
+lookup. Normal null-draw diagnostics stop sampling after eight attempts.
+
+The null guard skips missing-texture repaints by default instead of substituting
+a transparent pixel, which could be visible when alpha blending is disabled.
+No TPS improvement has been measured for this build. The live boot test is pending;
+publication is on hold until it is green.

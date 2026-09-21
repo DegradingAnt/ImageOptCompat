@@ -10,6 +10,9 @@
     <PackageReference Include="NUnit" Version="4.2.2" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <!-- Reads the game's net481 assemblies from a net9.0 host WITHOUT executing them, so the
+         name-binding contract tests can run against real Unity/RimWorld metadata. -->
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="9.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ImageOptCompat\ImageOptCompat.csproj" />

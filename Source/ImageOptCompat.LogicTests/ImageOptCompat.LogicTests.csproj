@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <NoWarn>CS9113</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="NUnit" Version="4.2.2" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.6.0" />
+  </ItemGroup>
+  <!-- Execute unchanged production logic against explicit test doubles. These tests cannot
+       validate GPU rendering, Unity native calls or Harmony detours. -->
+  <ItemGroup>
+    <Compile Include="../ImageOptCompat/NullTextureGuard.cs" Link="Actual/NullTextureGuard.cs" />
+    <Compile Include="../ImageOptCompat/MissingTextureReport.cs" Link="Actual/MissingTextureReport.cs" />
+    <Compile Include="../ImageOptCompat/ModAttribution.cs" Link="Actual/ModAttribution.cs" />
+    <Compile Include="../ImageOptCompat/Texture2DReadPatches.cs" Link="Actual/Texture2DReadPatches.cs" />
+    <Compile Include="../ImageOptCompat/VehicleReadback.cs" Link="Actual/VehicleReadback.cs" />
+    <Compile Include="../ImageOptCompat/ModContentPack_AnyContentLoaded_Patch.cs" Link="Actual/ModContentPack_AnyContentLoaded_Patch.cs" />
+    <Compile Include="../ImageOptCompat/EarlyUiGuards.cs" Link="Actual/EarlyUiGuards.cs" />
+    <Compile Include="../ImageOptCompat/OrphanSweep.cs" Link="Actual/OrphanSweep.cs" />
+    <Compile Include="../ImageOptCompat/OrphanPaths.cs" Link="Actual/OrphanPaths.cs" />
+  </ItemGroup>
+</Project>
