@@ -90,7 +90,7 @@ KNOWN GAPS - please read
 - The null-texture guard has not yet been confirmed in a running game. It is covered by tests and the patch targets are checked against the installed game's own assemblies, but the measured before-and-after log count is still to come.
 - Parts that need a live Unity object, such as the pixel copy itself, cannot run in the test suite. The names every patch binds to are checked against the installed game's assemblies, so a renamed method or argument fails a test instead of quietly switching a fix off.
 
-Written with AI assistance and independently reviewed with Codex. MIT licensed, fixes welcome. The current Release build passes 109 automated tests; live boot validation and publication are pending.
+I used AI tools during development, then checked the changes against the source and tests. MIT licensed; fixes welcome.
 
 The preview image combines art from Image Opt (soeur) and Faster Game Loading (Copyright (c) 2022 Taranchuk, MIT licence). If soeur, Taranchuk, Green_Mushroom or any other author whose work this touches would like anything changed or removed, ask and it will be done promptly.</description>
 </ModMetaData>

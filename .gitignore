@@ -5,6 +5,15 @@ obj/
 # local test scratch
 TestResults/
 boot-backup-*/
+
+# private development notes and boot-test scratch
+CODEX-HANDOVER.md
+CODEX-REVIEW.md
+OFFLINE-VALIDATION.md
+REVIEW-*.md
+BOOT-TEST.md
+boot-test-manifest.json
+install-boot-test.ps1
 # IDE
 .vs/
 .vscode/

@@ -1,11 +1,11 @@
 # Image Opt + Faster Game Loading Compatibility Patch
 
-A RimWorld 1.6 compatibility patch for running [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568) together with
+A small compatibility patch for using [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568) with
 [Faster Game Loading - Continued (Preview)](https://steamcommunity.com/sharedfiles/filedetails/?id=3797541348).
-**It needs both of those mods installed.** It patches around them and does not replace or modify either.
+Install both mods first, then load this patch after them. It leaves the original mods alone.
 
-It was built to make Image Opt usable on a very large mod list (the ~1,478-mod Progression pack),
-where Image Opt otherwise black-screened during loading.
+It started as a fix for a large Progression mod list (about 1,478 mods), where Image Opt could leave
+the game on a black screen during loading.
 
 ## Tested versions
 
@@ -22,11 +22,11 @@ placeholder (`0.0.0.0` and `1.0.0.0`), which identifies nothing. The check matte
 reflects into both mods' internals: a renamed field in a newer version would otherwise switch parts of it
 off silently.
 
-## Faster Game Loading: use the Preview build
+## Which Faster Game Loading build to use
 
-If you run [Faster Game Loading](https://steamcommunity.com/sharedfiles/filedetails/?id=3797541348), use **Faster Game Loading - Continued (Preview)**. It carries `ImageOptEarlyLoadCoordinator`, which stops FGL's early content loading from closing Image Opt's texture channel before loading finishes. Without it, Image Opt can black-screen at load.
+Use **Faster Game Loading - Continued (Preview)**. It includes the small Image Opt compatibility layer this patch expects. Without it, Image Opt can black-screen while the game is loading.
 
-This can't be declared as a dependency: both FGL builds share the package id `Taranchuk.FasterGameLoading`, so `About.xml` can't tell them apart. The patch checks for the coordinator **by capability** at startup and warns in the log and on its settings page if it's missing. 
+The regular and Preview builds share a package id, so RimWorld cannot tell them apart in the mod list. This patch checks which one is actually installed and warns if the required support is missing.
 
 ### Tested configuration
 
@@ -120,14 +120,6 @@ References come from NuGet (`Krafs.Rimworld.Ref`, `Lib.Harmony`), so a local Rim
 Run these commands from the repository root. Builds use separate bin/Debug and bin/Release directories. Only the explicit PackageRelease target copies a DLL into Assemblies; Debug packaging is rejected, and ordinary tests cannot overwrite the packaged DLL.
 Analysers are on (`AnalysisMode=All` plus Meziantou.Analyzer) and the build is expected to be warning-free.
 
-## How this was made
-
-Written with AI assistance (Claude) and reviewed by a second, independent AI reviewer (Codex), which found four
-real bugs the first pass had missed. All four are fixed. Each fix was checked in the compiled IL rather than
-trusted from the build log, since a clean build doesn't prove the fix landed.
-
-That's said openly so you can weight it appropriately. The gaps above are real and listed on purpose.
-
 ## Credits
 
 - **soeur** - [Image Opt](https://steamcommunity.com/sharedfiles/filedetails/?id=3543873568). This patch only exists because Image Opt ships its source.
@@ -135,6 +127,9 @@ That's said openly so you can weight it appropriately. The gaps above are real a
   Copyright (c) 2022 Taranchuk under the MIT licence.
 - **Green_Mushroom** - Faster Game Loading (Preview), whose Image Opt compatibility layer this relies on.
 - **ferny** and the Progression pack maintainers.
+
+Development note: I used AI tools while working on this patch, then checked the changes against the
+source, tests and installed game assemblies myself. User-facing changes are listed in the changelog.
 
 ## Takedown
 
@@ -145,21 +140,3 @@ issue or ask on the Workshop page and it will be done promptly.
 ## Licence
 
 MIT - see [LICENSE](LICENSE). Fixes and pull requests welcome.
-
-## Review of the current boot-test build
-
-See [REVIEW-2026-09-21.md](REVIEW-2026-09-21.md) for the corrected logic issues,
-installed-mod checks and exact boot-test DLL hash. All 109 automated tests pass;
-the production analyzer rebuild has zero warnings and errors. The existing
-cross-framework test reference still produces NU1702.
-
-The settings page now scrolls. Missing-texture recording honors its switch and
-ignores optional existence probes. Path repair runs only with Image Opt active,
-retries once, and does not record its own fallback probe. It does not deduplicate
-another mod's directory scan or suppress an error already logged by the original
-lookup. Normal null-draw diagnostics stop sampling after eight attempts.
-
-The null guard skips missing-texture repaints by default instead of substituting
-a transparent pixel, which could be visible when alpha blending is disabled.
-No TPS improvement has been measured for this build. The live boot test is pending;
-publication is on hold until it is green.
