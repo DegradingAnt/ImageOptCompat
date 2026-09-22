@@ -15,5 +15,6 @@
     <Compile Include="../ImageOptCompat/ReportLevel.cs" Link="Actual/ReportLevel.cs" />
     <Compile Include="../ImageOptCompat/ReportKind.cs" Link="Actual/ReportKind.cs" />
     <Compile Include="../ImageOptCompat/StartupCheck.cs" Link="Actual/StartupCheck.cs" />
+    <Compile Include="../ImageOptCompat/WavHeaderFix.cs" Link="Actual/WavHeaderFix.cs" />
   </ItemGroup>
 </Project>

@@ -42,9 +42,10 @@ internal static class StartupCheck
     internal sealed class Snapshot
     {
         internal bool ImageOptActive;
-        internal bool EarlyGuardsOn, NullGuardOn, AudioGuardOn, RepairOn, ReportOn, ReadbackOn;
+        internal bool EarlyGuardsOn, NullGuardOn, AudioGuardOn, RepairOn, ReportOn, ReadbackOn, SoundFixOn;
         internal int EarlyGuardsFound, EarlyGuardsInstalled, NullGuardTargets;
         internal bool AudioGuardInstalled, TextureHooksInstalled, ImageOptTrackingFound, HarmonyFramesResolve;
+        internal bool SoundFixInstalled;
         internal bool? FglSupport;
         internal string? UntestedVersions, FglUntestedSettings;
     }
@@ -96,6 +97,10 @@ internal static class StartupCheck
             Fix("Failed-audio guard", s.AudioGuardOn,
                 s.AudioGuardInstalled ? Pass("in place")
                 : Fail("not in place; a sound file that fails to decode can crash the game")),
+
+            Fix("Sound file loading repair", s.SoundFixOn,
+                s.SoundFixInstalled ? Pass("in place")
+                : Fail("not in place; sound files with an extensible WAV header stay silent")),
 
             WithImageOpt("Double-extension repair", s.RepairOn, s.ImageOptActive,
                 s.TextureHooksInstalled ? Pass("in place") : Fail("not in place; Image Opt cache paths will not be repaired")),

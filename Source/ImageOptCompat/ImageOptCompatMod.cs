@@ -53,6 +53,10 @@ public sealed class ImageOptCompatMod : Mod
         // deferred sound pass is where that gets reached. A catch block cannot catch it.
         if (Settings.guardFailedAudioClips) FailedAudioClipGuard.TryInstall(harmony);
 
+        // Also unconditional: RimWorld's decoder rejects the extensible WAV header whatever else
+        // is installed. Must be in place before mod content loads, which follows the constructors.
+        if (Settings.fixSoundLoading) SoundLoadingFix.TryInstall(harmony);
+
 
         if (!ImageOptActive)
         {
@@ -259,6 +263,14 @@ public sealed class ImageOptCompatMod : Mod
           + "that plays today stops playing. Requires a restart.");
         l.Gap();
 
+        l.CheckboxLabeled("Repair sound file loading", ref Settings.fixSoundLoading,
+            "Many audio editors save WAV files with an 'extensible' header, even for ordinary 16-bit "
+          + "stereo sound. The game's decoder rejects it, the sound stays silent, and the log shows a "
+          + "misleading 'Value cannot be null' error. This reads such files as the plain PCM they are, in "
+          + "memory, without changing anything on disk. It also lets the game log the real reason when a "
+          + "sound truly cannot be decoded. Requires a restart.");
+        l.Gap();
+
         l.CheckboxLabeled("Sweep orphaned .dds.zstd", ref Settings.sweepOrphanZstd,
             "Delete Image Opt .dds.zstd files whose source image no longer exists. These are served as "
           + "stale textures otherwise. Plain .dds is never touched - mods legitimately ship those.");
@@ -356,6 +368,8 @@ public sealed class ImageOptCompatMod : Mod
             : $"Null-texture guard: {NullTextureGuard.InstalledCount} draw method(s) hooked, "
             + $"{NullTextureGuard.Substituted} null draw(s) intercepted.");
         l.Label($"Last sweep: {OrphanSweep.LastDeleted} orphan(s) removed, {OrphanSweep.LastScanned} file(s) scanned.");
+        l.Label($"Sound files read through the header repair: {SoundLoadingFix.Repaired}; failed sound loads "
+              + $"whose real error was shown: {SoundLoadingFix.Unmasked}.");
         l.Label(MissingTextureReport.Installed && Settings.reportMissingTextures
             ? $"Missing textures recorded: {MissingTextureReport.DistinctPaths} distinct path(s)."
             : "Missing-texture reporting is off, so nothing is being recorded.");

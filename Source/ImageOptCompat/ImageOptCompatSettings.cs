@@ -22,6 +22,10 @@ public sealed class ImageOptCompatSettings : ModSettings
     // ON by default: this prevents a hard crash, and it only acts on a clip Unity has already
     // reported as failed to decode. Nothing that plays today stops playing.
     public bool guardFailedAudioClips = true;
+
+    // ON by default: reads extensible-header WAV files as the plain PCM they are, in memory only,
+    // and lets the game log the real reason when a sound truly cannot be decoded.
+    public bool fixSoundLoading = true;
     public bool recompressCopies = true;
     public bool destroyOriginalTexture;
 
@@ -41,6 +45,7 @@ public sealed class ImageOptCompatSettings : ModSettings
         Scribe_Values.Look(ref fixDoubleExtensionPaths, "fixDoubleExtensionPaths", true);
         Scribe_Values.Look(ref reportMissingTextures, "reportMissingTextures", false);
         Scribe_Values.Look(ref guardFailedAudioClips, "guardFailedAudioClips", true);
+        Scribe_Values.Look(ref fixSoundLoading, "fixSoundLoading", true);
         Scribe_Values.Look(ref recompressCopies, "recompressCopies", true);
         Scribe_Values.Look(ref destroyOriginalTexture, "destroyOriginalTexture", false);
         Scribe_Values.Look(ref reportLevel, "reportLevel", ReportLevel.Important);

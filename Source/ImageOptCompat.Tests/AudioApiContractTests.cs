@@ -89,6 +89,28 @@ public class AudioApiContractTests
         Assert.That(get.GetParameters()[0].ParameterType.FullName, Is.EqualTo("UnityEngine.AudioClip"));
     }
 
+    /// SoundLoadingFix binds these parameters BY NAME. A renamed one makes Harmony refuse the patch,
+    /// and the startup check then reports the sound-loading repair as not in place.
+    [Test]
+    public void SoundLoaderSignaturesMatchTheRepair()
+    {
+        var manager = GetType("Assembly-CSharp.dll", "RuntimeAudioClipLoader.Manager");
+
+        var load = manager.GetMethods(AllDeclared).Single(m => m.Name == "Load" && m.GetParameters().Length == 6);
+        Assert.That(load.GetParameters().Select(p => p.Name), Is.EqualTo(new[]
+        {
+            "dataStream", "audioFormat", "unityAudioClipName", "doStream", "loadInBackground", "diposeDataStreamIfNotNeeded",
+        }));
+        Assert.That(load.GetParameters()[0].ParameterType.FullName, Is.EqualTo("System.IO.Stream"));
+
+        var setState = manager.GetMethods(AllDeclared).Single(m => m.Name == "SetAudioClipLoadState"
+            && m.GetParameters()[0].ParameterType.FullName == "UnityEngine.AudioClip");
+        Assert.That(setState.GetParameters()[0].Name, Is.EqualTo("audioClip"));
+
+        var format = GetType("Assembly-CSharp.dll", "RuntimeAudioClipLoader.AudioFormat");
+        Assert.That(format.GetFields().Select(f => f.Name), Does.Contain("wav"));
+    }
+
     // ---- the state the guard reads -----------------------------------------------------------
 
     /// The whole fix rests on this property. A file-exists or header check would pass these clips:

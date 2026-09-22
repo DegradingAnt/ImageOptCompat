@@ -29,6 +29,12 @@ of about two hours. See "Measured results" in the README.
   main-menu status line shows the result, for example "all 9 startup checks passed", and hovering
   over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
   Progress shows it too.
+- **Sound file loading repair.** Many audio editors save WAV files with an "extensible" header,
+  even for ordinary 16-bit stereo sound. RimWorld's decoder rejects that header, the sound stays
+  silent, and the log shows a misleading "Value cannot be null" error. The mod now reads such files
+  as the plain PCM they are, in memory only; nothing on disk changes. In the test pack this brings
+  back all 8 sounds of the Hamster mod. When a sound truly cannot be decoded, the game now logs the
+  real reason instead of that error. It has its own switch.
 - **Failed-audio guard.** A sound the game cannot decode now plays as silence, instead of having its
   length read, which can crash Unity's audio code. It checks both Unity's and RimWorld's own decoder
   state, and covers clip, folder and custom sound grains. Works with or without Image Opt, and has

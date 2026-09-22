@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -26,6 +27,8 @@ internal static class Program
             Console.WriteLine("Core: " + typeof(object).Assembly.Location);
             Console.WriteLine("Harmony: " + typeof(Harmony).Assembly.Location);
             if (args.Contains("--legacy")) { ReproduceLegacyFailure(); return 0; }
+            var audio = Array.IndexOf(args, "--audio");
+            if (audio >= 0) { CheckRealDecoder(args[audio + 1]); return 0; }
 
             var dictionary = new Dictionary<string, int> { ["a"] = 1, ["b"] = 2 };
             foreach (var key in dictionary.Keys.ToList()) dictionary[key] = 3;
@@ -156,6 +159,34 @@ internal static class Program
         var probeTarget = typeof(StartupCheck).GetMethod("ProbeTarget", BindingFlags.NonPublic | BindingFlags.Static)!;
         var leftover = Harmony.GetPatchInfo(probeTarget);
         Check(leftover == null || leftover.Prefixes.Count == 0, "startup self-test removes its own patch");
+    }
+
+    /// End to end against the GAME's decoder, not a stand-in: load the installed Assembly-CSharp,
+    /// give its CustomAudioFileReader the file that failed in boot 2, then the rewritten copy.
+    /// The first must fail (the bug, reproduced) and the second must decode with the same format.
+    private static void CheckRealDecoder(string wavPath)
+    {
+        var managed = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        var game = Assembly.LoadFrom(Path.Combine(managed, "Assembly-CSharp.dll"));
+        var readerType = game.GetType("RuntimeAudioClipLoader.CustomAudioFileReader", throwOnError: true)!;
+        var wav = Enum.Parse(game.GetType("RuntimeAudioClipLoader.AudioFormat", throwOnError: true)!, "wav");
+        var original = File.ReadAllBytes(wavPath);
+
+        Exception? originalError = null;
+        try { Activator.CreateInstance(readerType, new MemoryStream(original), wav); }
+        catch (Exception e) { originalError = e.InnerException ?? e; }
+        Check(originalError != null, "the game's decoder rejects the original extensible file ("
+            + (originalError?.GetType().Name ?? "no error") + ": " + originalError?.Message + ")");
+
+        var rewritten = WavHeaderFix.Rewrite(original);
+        Check(rewritten != null, "the header rewrite accepts the measured file");
+        var reader = Activator.CreateInstance(readerType, new MemoryStream(rewritten!), wav)!;
+        var length = (long)readerType.GetProperty("Length")!.GetValue(reader)!;
+        var format = readerType.GetProperty("WaveFormat")!.GetValue(reader)!;
+        var rate = (int)format.GetType().GetProperty("SampleRate")!.GetValue(format)!;
+        var channels = (int)format.GetType().GetProperty("Channels")!.GetValue(format)!;
+        Check(length > 0 && rate == 96000 && channels == 2,
+            $"the game's decoder reads the rewritten file: {length} bytes of samples, {rate} Hz, {channels} channels");
     }
 
     // A separate process mode demonstrates why the former production design is unsafe.
