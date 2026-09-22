@@ -180,7 +180,7 @@ namespace Verse.Sound {
  public class ResolvedGrain_Clip { public ResolvedGrain_Clip(UnityEngine.AudioClip clip) {} }
 }
 namespace ImageOptCompat {
- public sealed class Settings { public bool vehicleReadback=true,recompressCopies=true,genericPixelReadback=true,nullTextureGuard=true,fixDoubleExtensionPaths=true,guardFailedAudioClips=true; public ReportLevel reportLevel = ReportLevel.Important; public bool destroyOriginalTexture,nullTextureShowPlaceholder,nullTextureDeepDiagnostic,reportMissingTextures; }
+ public sealed class Settings { public bool findRepeatedErrors=true,vehicleReadback=true,recompressCopies=true,genericPixelReadback=true,nullTextureGuard=true,fixDoubleExtensionPaths=true,guardFailedAudioClips=true; public ReportLevel reportLevel = ReportLevel.Important; public bool destroyOriginalTexture,nullTextureShowPlaceholder,nullTextureDeepDiagnostic,reportMissingTextures; }
  public static class ImageOptCompatMod { public static Settings Settings=new(); public static bool ImageOptActive=true; }
 }
 namespace ImageOpt { public static class Texture2DPatch { public static HashSet<int> NativeTextures=new(); } }
@@ -191,4 +191,11 @@ namespace VEF.Sounds {
 namespace Worldbuilder {
  public static class WorldbuilderMod { public static object? settings; }
  public static class Rand_EnsureStateStackEmpty_Patch { public static bool Prefix() => true; }
+}
+
+namespace UnityEngine {
+ // Unity formats every logged exception here; the repeated-error finder postfixes it.
+ public static class StackTraceUtility {
+  internal static void ExtractStringFromExceptionInternal(object exceptiono, out string message, out string stackTrace) { message = ""; stackTrace = ""; }
+ }
 }

@@ -53,6 +53,7 @@ public sealed class RuntimeLogicTests
         Log.Messages.Clear();
         Log.Errors.Clear();
         Report.Reset();
+        RepeatedErrorFinder.Reset();
         LongEventHandler.Pending.Clear();
     }
 
@@ -646,6 +647,62 @@ public sealed class RuntimeLogicTests
         Assert.That(shown, Is.EqualTo(new[] { "late problem" }));
         Assert.That(Report.TakePending(), Is.Empty);
         Assert.That(Report.ShownCount, Is.EqualTo(1));
+    }
+
+    private static Exception CrashInFixtureMod()
+    {
+        try { FixtureMod.Loader.Crash(null); }
+        catch (NullReferenceException e) { return e; }
+        throw new InvalidOperationException("the fixture did not throw");
+    }
+
+    /// Boot 2 logged the same NullReferenceException 4,478 times with no stack trace. The finder
+    /// reads the exception object itself, so it names the mod even then.
+    [Test]
+    public void ARepeatingErrorIsTracedToTheModThatThrowsIt()
+    {
+        OwnTestAssembly("Fixture Mod", "fixture.mod");
+        var error = CrashInFixtureMod();
+        for (var i = 1; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(error);
+        Assert.That(Log.Warnings, Is.Empty, "quiet below the notice threshold");
+
+        RepeatedErrorFinder.Observe(error);
+        Assert.That(Log.Warnings, Has.Count.EqualTo(1));
+        Assert.That(Log.Warnings[0], Does.Contain("Fixture Mod (fixture.mod) has thrown the same NullReferenceException 100 times")
+                                  .And.Contain("FixtureMod.Loader.Crash"));
+        Assert.That(Report.TakePending(), Is.Empty, "a notice stays in the log");
+
+        for (var i = RepeatedErrorFinder.NoticeAt; i < RepeatedErrorFinder.ProblemAt; i++) RepeatedErrorFinder.Observe(error);
+        Assert.That(Report.TakePending().Single(), Does.Contain("1000 times"), "shown on screen once at 1,000");
+        Assert.That(RepeatedErrorFinder.Snapshot().Single().Count, Is.EqualTo(RepeatedErrorFinder.ProblemAt));
+    }
+
+    /// The log is not safe off the main thread, so a threshold crossed there waits for the next
+    /// repeat on the main thread instead of being lost.
+    [Test]
+    public void AThresholdCrossedOnAWorkerIsReportedByTheNextMainThreadRepeat()
+    {
+        OwnTestAssembly("Fixture Mod", "fixture.mod");
+        var error = CrashInFixtureMod();
+        UnityData.IsInMainThread = false;
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(error);
+        Assert.That(Log.Warnings, Is.Empty, "nothing logged off the main thread");
+
+        UnityData.IsInMainThread = true;
+        RepeatedErrorFinder.Observe(error);
+        Assert.That(Log.Warnings, Has.Count.EqualTo(1));
+    }
+
+    [Test]
+    public void TheRepeatedErrorFinderCanBeSwitchedOff()
+    {
+        ImageOptCompatMod.Settings.findRepeatedErrors = false;
+        Call(typeof(RepeatedErrorFinder), "Postfix", CrashInFixtureMod());
+        Assert.That(RepeatedErrorFinder.Snapshot(), Is.Empty);
+
+        ImageOptCompatMod.Settings.findRepeatedErrors = true;
+        Call(typeof(RepeatedErrorFinder), "Postfix", CrashInFixtureMod());
+        Assert.That(RepeatedErrorFinder.Snapshot(), Has.Count.EqualTo(1));
     }
 
     private static void OwnTestAssembly(string name, string packageId)

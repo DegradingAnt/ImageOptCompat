@@ -57,6 +57,10 @@ public sealed class ImageOptCompatMod : Mod
         // is installed. Must be in place before mod content loads, which follows the constructors.
         if (Settings.fixSoundLoading) SoundLoadingFix.TryInstall(harmony);
 
+        // Unconditional: errors that repeat cost frame time whatever else is installed, and the
+        // player can only report them if someone names the mod.
+        if (Settings.findRepeatedErrors) RepeatedErrorFinder.TryInstall(harmony);
+
 
         if (!ImageOptActive)
         {
@@ -314,6 +318,13 @@ public sealed class ImageOptCompatMod : Mod
           + "report below is what an author needs to fix it. Requires a restart.");
         l.Gap();
 
+        l.CheckboxLabeled("Name the mods behind repeated errors", ref Settings.findRepeatedErrors,
+            "ON by default. When the same error keeps repeating, names the mod whose code throws it: in the "
+          + "log after 100 repeats, and once on screen after 1,000. It reads the error itself, so it works "
+          + "even when the log only shows \"Duplicate stacktrace\". It only runs while an error is being "
+          + "logged. The full list is in the diagnostic report. Requires a restart.");
+        l.Gap();
+
         l.CheckboxLabeled("Deep null-texture diagnostic", ref Settings.nullTextureDeepDiagnostic,
             "OFF by default, and genuinely slow: it reads the call stack on EVERY null draw rather than "
           + "the first few, to build an exact per-mod count. Turn it on only while hunting a fault.");
@@ -368,8 +379,7 @@ public sealed class ImageOptCompatMod : Mod
             : $"Null-texture guard: {NullTextureGuard.InstalledCount} draw method(s) hooked, "
             + $"{NullTextureGuard.Substituted} null draw(s) intercepted.");
         l.Label($"Last sweep: {OrphanSweep.LastDeleted} orphan(s) removed, {OrphanSweep.LastScanned} file(s) scanned.");
-        l.Label($"Sound files read through the header repair: {SoundLoadingFix.Repaired}; failed sound loads "
-              + $"whose real error was shown: {SoundLoadingFix.Unmasked}.");
+        DrawSoundAndErrorCounters(l);
         l.Label(MissingTextureReport.Installed && Settings.reportMissingTextures
             ? $"Missing textures recorded: {MissingTextureReport.DistinctPaths} distinct path(s)."
             : "Missing-texture reporting is off, so nothing is being recorded.");
@@ -386,7 +396,9 @@ public sealed class ImageOptCompatMod : Mod
                        + Environment.NewLine
                        + MissingTextureReport.BuildReport()
                        + Environment.NewLine
-                       + FailedAudioClipGuard.ReportLine();
+                       + FailedAudioClipGuard.ReportLine()
+                       + Environment.NewLine
+                       + RepeatedErrorFinder.BuildReport();
             GUIUtility.systemCopyBuffer = report;
             Notify("diagnostic report copied to the clipboard.");
         }
@@ -410,6 +422,17 @@ public sealed class ImageOptCompatMod : Mod
                 Notify("scan copied to the clipboard and written to the log.");
             }
         }
+    }
+
+    private static void DrawSoundAndErrorCounters(Listing_Standard l)
+    {
+        l.Label($"Sound files read through the header repair: {SoundLoadingFix.Repaired}; failed sound loads "
+              + $"whose real error was shown: {SoundLoadingFix.Unmasked}.");
+        var repeated = RepeatedErrorFinder.Snapshot();
+        l.Label(repeated.Count == 0
+            ? "Repeated errors: none logged this session."
+            : $"Repeated errors: {repeated.Count} distinct; worst: {repeated[0].Count:N0}x "
+              + $"{repeated[0].Exception} from {repeated[0].Owner}.");
     }
 
     /// Why a scan has nothing to work on. Three different situations, and only one of them needs

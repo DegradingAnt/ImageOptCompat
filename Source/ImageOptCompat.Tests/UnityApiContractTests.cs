@@ -110,6 +110,19 @@ public class UnityApiContractTests
     // ---- Texture2DReadPatches' contract ----------------------------------------------------
 
     /// The inconsistency that already caught us once: Unity spells it `miplevel` here...
+    /// RepeatedErrorFinder binds Unity's parameter BY NAME, and Unity spells it "exceptiono". A
+    /// postfix written with the obvious name would bind nothing and find nothing, silently.
+    [Test]
+    public void UnityFormatsExceptionsThroughTheMethodTheFinderPatches()
+    {
+        var utility = GetType("UnityEngine.CoreModule.dll", "UnityEngine.StackTraceUtility");
+        var method = utility.GetMethod("ExtractStringFromExceptionInternal",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.That(method, Is.Not.Null);
+        Assert.That(method!.GetParameters()[0].Name, Is.EqualTo("exceptiono"));
+        Assert.That(method.GetParameters()[0].ParameterType.FullName, Is.EqualTo("System.Object"));
+    }
+
     [Test]
     public void GetPixelsSpellsTheMipArgumentLowercase()
     {

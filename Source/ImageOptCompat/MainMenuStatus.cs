@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using HarmonyLib;
 using RimWorld;
@@ -84,21 +85,35 @@ internal static class MainMenuStatus
     private static void ShowLive(string text) =>
         Messages.Message(ModInfo.Tag + " " + text, MessageTypeDefOf.NegativeEvent, historical: false);
 
+    private static string? cachedLabel;
+    private static Vector2 cachedSize;
+    private static int cachedProblems = -1;
+    private static IReadOnlyList<StartupCheck.Result>? cachedResults;
+
     private static void DrawStatusLine()
     {
+        // This runs every frame the menu is open. The text only changes when a problem is reported
+        // or the checks rerun, so it is rebuilt then and not every frame.
         var problems = Report.ShownCount;
-        var label = problems == 0
-            ? $"{ModInfo.Name}: {StartupCheck.Summary()}"
-            : $"{ModInfo.Name}: {problems} problem(s) - hover for details";
+        var results = StartupCheck.Results;
+        var rebuild = cachedLabel == null || problems != cachedProblems || !ReferenceEquals(results, cachedResults);
+        if (rebuild)
+        {
+            cachedLabel = problems == 0
+                ? $"{ModInfo.Name}: {StartupCheck.Summary()}"
+                : $"{ModInfo.Name}: {problems} problem(s) - hover for details";
+            cachedProblems = problems;
+            cachedResults = results;
+        }
 
         var oldFont = Text.Font;
         var oldColor = GUI.color;
         Text.Font = GameFont.Small;
         GUI.color = (problems == 0 ? Color.white : new Color(1f, 0.8f, 0.4f)).ToTransparent(0.5f);
 
-        var size = Text.CalcSize(label);
-        var rect = new Rect(Left, Top, size.x, size.y);
-        Widgets.Label(rect, label);
+        if (rebuild) cachedSize = Text.CalcSize(cachedLabel);
+        var rect = new Rect(Left, Top, cachedSize.x, cachedSize.y);
+        Widgets.Label(rect, cachedLabel);
 
         GUI.color = oldColor;
         Text.Font = oldFont;

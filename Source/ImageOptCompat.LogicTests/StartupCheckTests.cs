@@ -13,7 +13,7 @@ public sealed class StartupCheckTests
     {
         ImageOptActive = true,
         EarlyGuardsOn = true, NullGuardOn = true, AudioGuardOn = true, RepairOn = true, ReadbackOn = true,
-        SoundFixOn = true, SoundFixInstalled = true,
+        SoundFixOn = true, SoundFixInstalled = true, RepeatedFinderOn = true, RepeatedFinderInstalled = true,
         EarlyGuardsFound = 2, EarlyGuardsInstalled = 2, NullGuardTargets = 2,
         AudioGuardInstalled = true, TextureHooksInstalled = true, ImageOptTrackingFound = true,
         HarmonyFramesResolve = true, FglSupport = true,

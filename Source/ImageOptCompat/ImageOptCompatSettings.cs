@@ -26,6 +26,9 @@ public sealed class ImageOptCompatSettings : ModSettings
     // ON by default: reads extensible-header WAV files as the plain PCM they are, in memory only,
     // and lets the game log the real reason when a sound truly cannot be decoded.
     public bool fixSoundLoading = true;
+
+    // ON by default: it only runs while an error is being logged, which is already far costlier.
+    public bool findRepeatedErrors = true;
     public bool recompressCopies = true;
     public bool destroyOriginalTexture;
 
@@ -46,6 +49,7 @@ public sealed class ImageOptCompatSettings : ModSettings
         Scribe_Values.Look(ref reportMissingTextures, "reportMissingTextures", false);
         Scribe_Values.Look(ref guardFailedAudioClips, "guardFailedAudioClips", true);
         Scribe_Values.Look(ref fixSoundLoading, "fixSoundLoading", true);
+        Scribe_Values.Look(ref findRepeatedErrors, "findRepeatedErrors", true);
         Scribe_Values.Look(ref recompressCopies, "recompressCopies", true);
         Scribe_Values.Look(ref destroyOriginalTexture, "destroyOriginalTexture", false);
         Scribe_Values.Look(ref reportLevel, "reportLevel", ReportLevel.Important);

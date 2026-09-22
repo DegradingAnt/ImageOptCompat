@@ -45,7 +45,7 @@ internal static class StartupCheck
         internal bool EarlyGuardsOn, NullGuardOn, AudioGuardOn, RepairOn, ReportOn, ReadbackOn, SoundFixOn;
         internal int EarlyGuardsFound, EarlyGuardsInstalled, NullGuardTargets;
         internal bool AudioGuardInstalled, TextureHooksInstalled, ImageOptTrackingFound, HarmonyFramesResolve;
-        internal bool SoundFixInstalled;
+        internal bool SoundFixInstalled, RepeatedFinderOn, RepeatedFinderInstalled;
         internal bool? FglSupport;
         internal string? UntestedVersions, FglUntestedSettings;
     }
@@ -102,6 +102,10 @@ internal static class StartupCheck
                 s.SoundFixInstalled ? Pass("in place")
                 : Fail("not in place; sound files with an extensible WAV header stay silent")),
 
+            Fix("Repeated-error finder", s.RepeatedFinderOn,
+                s.RepeatedFinderInstalled ? Pass("in place")
+                : Fail("not in place; repeated errors will not be traced to a mod")),
+
             WithImageOpt("Double-extension repair", s.RepairOn, s.ImageOptActive,
                 s.TextureHooksInstalled ? Pass("in place") : Fail("not in place; Image Opt cache paths will not be repaired")),
 
@@ -122,22 +126,25 @@ internal static class StartupCheck
                 s.UntestedVersions ?? "Image Opt, Faster Game Loading and Harmony are the tested versions"),
         };
 
-        if (s.FglSupport != null)
-        {
-            results.Add(new("Faster Game Loading build",
-                s.FglSupport == true ? Outcome.Pass : Outcome.Failed,
-                s.FglSupport == true ? "the Preview build, with Image Opt support"
-                : "a build without Image Opt support; loading can black-screen. Use the Preview build"));
-        }
-
-        if (s.FglSupport == true)
-        {
-            results.Add(new("Faster Game Loading settings",
-                s.FglUntestedSettings == null ? Outcome.Pass : Outcome.Untested,
-                s.FglUntestedSettings ?? "the tested defaults"));
-        }
-
+        AddFasterGameLoadingChecks(results, s);
         return results;
+    }
+
+    /// Only when Faster Game Loading is active; its settings only matter on the build that works.
+    private static void AddFasterGameLoadingChecks(List<Result> results, Snapshot s)
+    {
+        if (s.FglSupport == null) return;
+
+        results.Add(new("Faster Game Loading build",
+            s.FglSupport == true ? Outcome.Pass : Outcome.Failed,
+            s.FglSupport == true ? "the Preview build, with Image Opt support"
+            : "a build without Image Opt support; loading can black-screen. Use the Preview build"));
+
+        if (s.FglSupport != true) return;
+
+        results.Add(new("Faster Game Loading settings",
+            s.FglUntestedSettings == null ? Outcome.Pass : Outcome.Untested,
+            s.FglUntestedSettings ?? "the tested defaults"));
     }
 
     private static (Outcome, string) Pass(string detail) => (Outcome.Pass, detail);

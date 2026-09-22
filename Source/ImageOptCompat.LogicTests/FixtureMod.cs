@@ -15,6 +15,10 @@ public static class Window
 
 public static class Loader
 {
+    /// Throws a NullReferenceException from this mod's own code, as the boot-2 flood did.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static int Crash(string? value) => value!.Length;
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static Texture2D? LoadMissingIcon() => ContentFinder<Texture2D>.Get("FixtureMod/MissingIcon");
 }

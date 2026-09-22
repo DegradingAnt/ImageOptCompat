@@ -29,6 +29,11 @@ of about two hours. See "Measured results" in the README.
   main-menu status line shows the result, for example "all 9 startup checks passed", and hovering
   over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
   Progress shows it too.
+- **Repeated-error finder.** When the same error keeps repeating, the mod names the mod whose code
+  throws it. That is a notice in the log after 100 repeats, and once on screen after 1,000. It reads
+  the error itself, so it works even when the log only says "Duplicate stacktrace". The test pack
+  logged one error 4,478 times that way, and nothing named its source. It only runs while an error is
+  being logged, lists every repeating error in the diagnostic report, and has its own switch.
 - **Sound file loading repair.** Many audio editors save WAV files with an "extensible" header,
   even for ordinary 16-bit stereo sound. RimWorld's decoder rejects that header, the sound stays
   silent, and the log shows a misleading "Value cannot be null" error. The mod now reads such files
