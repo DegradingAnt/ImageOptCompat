@@ -1,57 +1,69 @@
 # Changelog
 
-## Unreleased — 2026-09-22 review fixes
+Every notable change to this mod, newest first. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version numbers match `modVersion` in
+`About/About.xml`. Each entry describes the change against the previous published version, not the
+steps taken in between.
 
-- Fixed the texture/audio lookup mix-up: removed both Harmony patches on `ContentFinder<T>.Get`.
-  RimWorld's Mono shares that method across reference types, so a texture patch redirected audio
-  lookups into textures and the audio patch redirected texture lookups into audio. Reproduced using
-  the installed Mono and Harmony. Texture repair now uses the non-generic resource fallback, and
-  missing-texture reporting observes final errors without suppressing them. Existing mod, resource
-  and bundle assets keep priority over corrected paths; optional probes remain unreported.
-- Moved the failed-audio guard to the non-generic sound-grain constructor. It now checks both Unity
-  and RimWorld's `RuntimeAudioClipLoader` state, and also covers folder/custom grains. Failed clips
-  use one reusable silent clip before their length is read; Loading/Unloaded clips stay intact.
-- Kept the vehicle-holder key snapshot and corrected its explanation: the installed Mono dictionary
-  invalidates enumeration on an existing-key overwrite, even without another writer. The earlier
-  claim that removing this snapshot was safe was wrong.
-- Check the main thread before reading IMGUI's `Event.current`. Count cached pixel reads as well
-  as first reads in the session counter. Show the audio guard as disabled when its toggle is off.
-- Make asset-scan owner selection deterministic and cap distinct mods instead of file hits, so
-  several hits in one mod cannot hide other candidates. Include the matching file in the report
-  and avoid claiming a negative scan proves the path was constructed at runtime.
-- Added a separate regression runner using the installed game's Mono and Harmony, including a
-  reproduction of the former generic-patch bug. Unity native rendering/audio remain stand-ins.
+## [Unreleased]
 
-- Earlier performance changes retained: read `Event.current` once per intercepted draw and check
-  texture-folder existence in parallel. The attempted vehicle key-snapshot removal was reverted
-  after it broke loading; it was not a behavior-preserving optimization.
+Nothing yet.
 
-- **Double-extension path fix is now complete for the full cache path too.** It previously corrected a
-  path ending `.dds` (a mod that stripped `.zstd` off Image Opt's `name.dds.zstd`). It now also corrects a
-  path built from the cache file's whole name (`name.dds.zstd`), so a mod that used the full cache filename
-  instead of stripping one extension is rescued as well. The rule stays narrow: only the two Image Opt
-  artefact suffixes. A thread-local guard limits correction to one retry even for repeated suffixes.
-- **Null-texture guard is now discoverable.** It had been running silently, so a flood was only visible by
-  opening the settings page. Once 50+ null draws are intercepted it logs a one-line hint pointing at the
-  'Copy diagnostic report' button and the 'Show a placeholder' option. One hint per session.
-- **The generic pixel-readback now reports how often it served a read.** The feature has counted
-  every read it answered from a CPU-readable copy since it was added, but the counter was never
-  shown. It is now a read-out in the settings page ("This session") next to the vehicle readback
-  count, and it resets to zero on content teardown so it never describes copies from a previous
-  content set. Added a logic test covering the reset.
+## [0.3.0] - 2026-09-22
 
-- **Harmony version is now checked alongside Image Opt and Faster Game Loading.** The patch reflects into
-  both mods' internals, so a renamed field in a newer Harmony can silently switch part of the patch off.
-  The tested Harmony version (`2.4.2.0`) is now compared at startup too, and an untested Harmony is reported
-  in the same 'Untested versions' line. The version comparison was extracted into a Verse-free `VersionCheck`
-  helper (kept out of `ImageOptCompatMod` so it runs under the test host without `Assembly-CSharp`) and is
-  covered by new unit tests, including the new Harmony case.
+First Workshop release. Boot-tested on the full Progression pack (about 1,485 mods) over a session
+of about two hours. See "Measured results" in the README.
 
-- **Runtime behaviour tests added for the failed-audio crash guard and mod attribution.** The crash guard
-  now proves, at runtime, that a decode-failed clip is reported missing while Unloaded/Loading clips are
-  kept and the toggle works; the attribution caller-walk is covered too.
+### Added
+- **Failed-audio guard.** A sound the game cannot decode now plays as silence, instead of having its
+  length read, which can crash Unity's audio code. It checks both Unity's and RimWorld's own decoder
+  state, and covers clip, folder and custom sound grains. Works with or without Image Opt, and has
+  its own switch.
+- **"Scan mods" button.** Searches every active mod's XML and assemblies for the recorded missing
+  asset paths and names the mod and file that mention each one. It is slow, so it only runs when
+  pressed.
+- **Harmony version check.** Harmony is now checked at startup alongside Image Opt and Faster Game
+  Loading, and an untested version is reported.
+- **Null-texture flood hint.** Once 50 null draws have been intercepted, one log line points at the
+  diagnostic report and the placeholder option. Before, a flood was only visible on the settings
+  page.
+- **Full cache-name repair.** The double-extension repair also fixes paths built from the cache
+  file's whole name (`name.dds.zstd`), not only `name.dds`.
+- **Readback counter.** The settings page shows how many pixel reads the generic readback served
+  this session, cached reads included.
 
-## 0.2.0
+### Changed
+- **The mod uses its full name everywhere players see it.** The Mod Settings entry said
+  "ImageOptCompat", and every log line began with "[ImageOptCompat]". Neither matched anything in
+  the mod list. Both now read "Image Opt + Faster Game Loading Compatibility Patch". The package id
+  is unchanged, so saved settings carry over.
+- Texture repair now hooks the game's non-generic resource fallback. The missing-texture report
+  watches the game's final error lines and never suppresses them.
+- The orphan sweep checks texture folders in parallel.
+
+### Fixed
+- **Audio lookups were being run as texture lookups.** RimWorld's Mono runtime shares
+  `ContentFinder<T>.Get` between asset types, so 0.2.0's texture hook also caught sound and music
+  lookups. One session logged 2,625 missing-texture errors, most of them song and sound names. The
+  hook is gone, and the boot test logged none.
+- **Diagnostics named the wrong mod.** The null-texture and missing-texture reports read the call
+  stack, where a Harmony-patched method shows up as generated code. The first live boot blamed
+  WanderJoinsPlus for Harmony's own frames, because Harmony's DLL is listed under every mod that
+  ships its own copy (104 mod folders in the test install). Reports now look through patched
+  methods and never credit a shared DLL to one mod. When no single mod is on the stack, they say
+  so.
+- The double-extension repair also looks through patched methods, so another mod patching
+  `ContentFinder<T>.Get` can no longer switch it off unnoticed.
+- The "Scan mods" button no longer tells players to turn on a setting that is already on when
+  nothing is missing.
+
+### Release checks
+- 125 unit and contract tests, 52 logic tests, and the 30-check regression runner, which executes
+  real Harmony patches on the installed game's Mono runtime. The Release build has no warnings.
+
+## [0.2.0] - 2026-09-21
+
+Published on GitHub only.
 
 - Added cached CPU-readable copies for Image Opt textures that other mods need to read.
 - Added vehicle texture readback support for Vehicle Framework and compatible vehicle packs.
@@ -62,3 +74,7 @@
 - Added load-order hints for the required mods and Sarcho Turtle.
 - Added tests for the patch logic and the installed RimWorld/Unity API surface.
 - Release checks include 146 automated tests and a warning-free Release package build.
+
+[Unreleased]: https://github.com/DegradingAnt/ImageOptCompat/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/DegradingAnt/ImageOptCompat/compare/f3b267e...v0.3.0
+[0.2.0]: https://github.com/DegradingAnt/ImageOptCompat/tree/f3b267e

@@ -78,7 +78,7 @@ public static class OrphanSweep
         try { files = Directory.GetFiles(texDir, "*.dds.zstd", SearchOption.AllDirectories); }
         catch (Exception e)
         {
-            if (verbose) messages.Enqueue($"[ImageOptCompat] enumerate failed '{texDir}': {e.Message}");
+            if (verbose) messages.Enqueue($"{ModInfo.Tag} enumerate failed '{texDir}': {e.Message}");
             return;
         }
 
@@ -90,9 +90,9 @@ public static class OrphanSweep
             {
                 File.Delete(f);
                 deleted++;
-                if (verbose) messages.Enqueue($"[ImageOptCompat] orphan removed: {f}");
+                if (verbose) messages.Enqueue($"{ModInfo.Tag} orphan removed: {f}");
             }
-            catch (Exception e) { messages.Enqueue($"[ImageOptCompat] could not delete '{f}': {e.Message}"); }
+            catch (Exception e) { messages.Enqueue($"{ModInfo.Tag} could not delete '{f}': {e.Message}"); }
         }
     }
 
@@ -125,7 +125,7 @@ public static class OrphanSweep
         }
         catch (AggregateException e)
         {
-            messages.Enqueue($"[ImageOptCompat] the sweep hit {e.InnerExceptions.Count} error(s); "
+            messages.Enqueue($"{ModInfo.Tag} the sweep hit {e.InnerExceptions.Count} error(s); "
                            + "some folders may not have been swept.");
         }
 
@@ -151,7 +151,7 @@ public static class OrphanSweep
             // the kind of stale readout that misleads a later diagnosis.
             LastDeleted = 0;
             LastScanned = 0;
-            Log.Message("[ImageOptCompat] sweep skipped - Image Opt is not active, so nothing here owns any .dds.zstd.");
+            Log.Message(ModInfo.Tag + " sweep skipped - Image Opt is not active, so nothing here owns any .dds.zstd.");
             return;
         }
 
@@ -179,8 +179,8 @@ public static class OrphanSweep
         LastDeleted = deleted;
         LastScanned = scanned;
         if (deleted > 0)
-            Log.Message($"[ImageOptCompat] swept {deleted.ToString(CultureInfo.InvariantCulture)} orphaned .dds.zstd of {scanned.ToString(CultureInfo.InvariantCulture)} scanned across {roots.Count.ToString(CultureInfo.InvariantCulture)} texture folder(s).");
+            Log.Message($"{ModInfo.Tag} swept {deleted.ToString(CultureInfo.InvariantCulture)} orphaned .dds.zstd of {scanned.ToString(CultureInfo.InvariantCulture)} scanned across {roots.Count.ToString(CultureInfo.InvariantCulture)} texture folder(s).");
         else if (ImageOptCompatMod.Settings.verbose)
-            Log.Message($"[ImageOptCompat] no orphans among {scanned.ToString(CultureInfo.InvariantCulture)} .dds.zstd in {roots.Count.ToString(CultureInfo.InvariantCulture)} folder(s).");
+            Log.Message($"{ModInfo.Tag} no orphans among {scanned.ToString(CultureInfo.InvariantCulture)} .dds.zstd in {roots.Count.ToString(CultureInfo.InvariantCulture)} folder(s).");
     }
 }

@@ -65,7 +65,7 @@ Unity numbers monitors from 1, so `1` selects the primary display. Fully exit Ri
 | **Double-extension path fix** | Image Opt caches as `name.dds.zstd`. A mod that builds texture paths by scanning its own folder calls `Path.GetFileNameWithoutExtension`, which strips only the **last** extension - yielding `name.dds`, a content path that resolves to nothing. Measured cause of the flood below: **Holograms And Projectors** (`Vesper.HologramsAndProjectors`) → 60 dead paths → 60 null-texture materials → 222,128 warnings. Retries the corrected path, and only ever after a lookup has already failed. |
 | **Missing-texture report** | Opt-in. Observes final required texture-lookup errors, records the def and owning mod, and copies a report to the clipboard. Leaves the original error intact and ignores optional probes. |
 | **Failed-audio guard** | Checks Unity and RimWorld's decoder state before a sound grain reads a failed clip's length. Uses one reusable silent clip for failed clips, including folder and custom grains. Loading and unloaded clips are preserved. |
-| **Null-texture guard** | Unity logs `null texture passed to GUI.DrawTexture` once per call with no deduplication - Unity emits it itself, so RimWorld's repeat filter never sees it. Measured at **222,128 lines in one session, 94% of a 236,731-line log**. Drawing and ticking share a thread, so it costs tick rate and shows as stutter above 1× while 1× looks fine. Skips the null repaint draw by default, so the screen stays pixel-identical (a null draws nothing and Unity's warning is suppressed); `BadTex` (magenta) is available as an opt-in diagnostic. Names the first 8 distinct callers once each, with the owning mod. |
+| **Null-texture guard** | Unity logs `null texture passed to GUI.DrawTexture` once per call with no deduplication - Unity emits it itself, so RimWorld's repeat filter never sees it. Measured at **222,128 lines in one session, 94% of a 236,731-line log**. Drawing and ticking share a thread, so it costs tick rate and shows as stutter above 1× while 1× looks fine. Skips the null repaint draw by default, so the screen stays pixel-identical (a null draws nothing and Unity's warning is suppressed); `BadTex` (magenta) is available as an opt-in diagnostic. Samples the first 8 null draws and names the nearest mod on the call stack for each, looking through Harmony-patched methods. When no single mod can be named, it says so. |
 
 Texture fixes and the orphan sweep are disabled when Image Opt is inactive. The early-UI guards and the null-texture guard remain active: neither problem is Image Opt's doing, and both cost frame time regardless.
 
@@ -93,25 +93,38 @@ still runs, since skipping it would break more than it fixes.
 
 ## Measured results
 
-On one boot of the full Progression pack with Image Opt and this patch enabled:
+Boot test of the reviewed build (2026-09-22): the full Progression pack with Image Opt and this
+patch enabled, a session of about two hours.
 
-- reached the main menu, where Image Opt alone had black-screened
-- 552 vehicle textures converted across 6 vehicle mods
-- zero `Root level exception` errors (previously thrown every frame)
-- GC pauses fell from 21 (74.9 s total) to 1 (2.6 s); the Prepatcher phase fell from 51.8 s to 6.1 s
+- reached the main menu and loaded the save, where Image Opt alone had black-screened
+- 552 vehicle textures made CPU-readable across 6 vehicle mods
+- 0 Unity `null texture passed to GUI.DrawTexture` warnings. The session that found the flood logged
+  222,128. The double-extension repair removes the main source at load, and the guard caught the
+  null draws that remained.
+- 0 `Could not load Texture2D` and 0 `Could not load AudioClip` errors. An earlier build's own
+  generic `ContentFinder<T>` hooks had caused thousands of them. The review removed those hooks.
+
+The attribution fix and the rename came after that boot. They change only which mod a diagnostic
+names and what the mod is called. The test suites and the Mono probe cover them, but they were not
+part of the boot.
+
+An earlier build, on the same list, also measured GC pauses falling from 21 (74.9 s total) to 1
+(2.6 s), and the Prepatcher phase from 51.8 s to 6.1 s. Those were not re-measured for this build,
+and no TPS figure has been measured at all.
 
 That's one machine and one mod list. Your numbers will differ.
-
-**Those numbers come from an earlier build.** The generic readback cache, its cleanup and the configuration checks have since changed. These measurements do not validate the current release, which still needs its final in-game boot test.
 
 ## Known gaps - please read before relying on it
 
 - **The vehicle livery has not been visually confirmed.** Textures convert without error, but no one has yet opened a vehicle paint page and checked the turret. This is the fix the patch exists for, and it's unverified.
 - **Proactive vehicle conversion covers ten mods.** Generic readback additionally handles other Image Opt textures on the main thread. Direct calls to the native five-argument GetPixels overload remain uncovered.
-- **Real Unity rendering/audio still need testing.** Unit and logic tests use explicit stand-ins;
+- **No test runs Unity's native rendering or audio.** Unit and logic tests use explicit stand-ins;
   contract tests read installed game metadata. The separate Mono probe executes real Harmony
-  detours on the installed game's runtime, but does not execute Unity's native graphics or audio.
-- **The null-texture guard has not run in a live game.** Its rules are covered by tests, and four planted defects were each caught by the suite, but the before-and-after log count that would prove the flood stops is still outstanding.
+  detours on the installed game's runtime, but not Unity's native graphics or audio. The live
+  boot above is the only end-to-end evidence.
+- **Null-draw reports name the nearest mod on the call stack.** That is usually the mod to report
+  to, but a missing texture can also come from elsewhere, such as a def another mod supplied. When
+  no single mod is on the stack, the report says so rather than guessing.
 - **The original Image Opt textures are not freed by default** (see `destroyOriginalTexture`). They wrap memory that Image Opt's native library still owns.
 
 If you can check any of these, a report is the most useful thing you can send.

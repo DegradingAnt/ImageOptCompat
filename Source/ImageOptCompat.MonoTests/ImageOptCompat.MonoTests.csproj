@@ -10,5 +10,6 @@
     <Compile Include="../ImageOptCompat/MissingTextureReport.cs" Link="Actual/MissingTextureReport.cs" />
     <Compile Include="../ImageOptCompat/FailedAudioClipGuard.cs" Link="Actual/FailedAudioClipGuard.cs" />
     <Compile Include="../ImageOptCompat/ModAttribution.cs" Link="Actual/ModAttribution.cs" />
+    <Compile Include="../ImageOptCompat/ModInfo.cs" Link="Actual/ModInfo.cs" />
   </ItemGroup>
 </Project>

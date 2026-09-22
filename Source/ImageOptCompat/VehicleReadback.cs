@@ -62,7 +62,7 @@ public static class VehicleReadback
 
         Replaced += converted;
         if (converted > 0 || ImageOptCompatMod.Settings.verbose)
-            Log.Message($"[ImageOptCompat] {packageId}: {converted} texture(s) made CPU-readable.");
+            Log.Message($"{ModInfo.Tag} {packageId}: {converted} texture(s) made CPU-readable.");
     }
 
     /// ReadPixels lands in RGBA32 (uncompressed). If the source was block-compressed, keeping
@@ -133,7 +133,7 @@ public static class VehicleReadback
         }
         catch (Exception e)
         {
-            Log.Warning($"[ImageOptCompat] CPU-readable copy failed for '{srcName}': {e.Message}");
+            Log.Warning($"{ModInfo.Tag} CPU-readable copy failed for '{srcName}': {e.Message}");
             return null;
         }
         finally

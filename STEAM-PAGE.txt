@@ -24,6 +24,7 @@ Made for [b]RimWorld 1.6 on Windows[/b].
 [*]Loading-screen errors from Vanilla Expanded Framework and Worldbuilder trying to use data before it is ready.
 [*]Missing textures caused by mods picking up Image Opt's cache files when scanning their texture folders. Holograms and Projectors is one example.
 [*]Repeated "null texture passed to GUI.DrawTexture" warnings. Missing textures stay invisible by default, with an optional magenta marker to help find them.
+[*]Sound files the game fails to decode. Reading such a clip's length can crash Unity's audio code, so it plays as silence instead. This works with or without Image Opt.
 [/list]
 
 It also cleans up leftover Image Opt caches when their source images are gone. Plain .dds files are left alone.
@@ -56,11 +57,11 @@ The VEF guard waits for its dev-tool keybinding. The Worldbuilder guard waits fo
 
 The null guard skips invalid repaint draws rather than substituting a transparent texture, which could still be visible with alpha blending disabled. Normal diagnostics sample the first eight intercepted draws. Deep diagnostics inspect every intercepted draw, with bounded reporting storage.
 
-Missing-texture recording is off by default and excludes optional existence checks. Reports include the requesting def and mod where available. A draw report may identify a shared UI helper rather than the mod that originally supplied the missing texture.
+Missing-texture recording is off by default and excludes optional existence checks. Reports include the requesting def and mod where available. Draw reports name the nearest mod on the call stack, looking through Harmony-patched methods, and say so when no single mod can be named. That mod is usually the one to report to, though a missing texture can come from elsewhere.
 
 [b]Versions and testing[/b]
 Checked against RimWorld 1.6.4871, Harmony 2.4.2, Image Opt 0.1.13 and Faster Game Loading Preview 2026.09.07.1 with FGL's default settings. FGL's regular and Preview builds share a package ID, so the patch checks for the loading coordinator itself.
 
-The Release build passes 109 automated tests. These include installed-mod API checks and logic tests with Unity stand-ins; actual rendering and full mod-pack compatibility still need in-game testing.
+The Release build passes 177 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate 30-check runner executes real Harmony patches on RimWorld's own Mono runtime. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
 
-One inspected log contained 222,128 repeated null-texture warnings. No TPS improvement has been measured for this build, and results will depend on what is slowing down your game.
+That boot ran the full Progression pack (about 1,485 mods) for a session of about two hours. It logged 0 null-texture warnings, where the session that found the flood logged 222,128. No TPS improvement has been measured, and results will depend on what is slowing down your game.

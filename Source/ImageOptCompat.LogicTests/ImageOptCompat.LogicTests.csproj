@@ -25,5 +25,6 @@
     <Compile Include="../ImageOptCompat/OrphanPaths.cs" Link="Actual/OrphanPaths.cs" />
     <Compile Include="../ImageOptCompat/FailedAudioClipGuard.cs" Link="Actual/FailedAudioClipGuard.cs" />
     <Compile Include="../ImageOptCompat/AssetRequesterScan.cs" Link="Actual/AssetRequesterScan.cs" />
+    <Compile Include="../ImageOptCompat/ModInfo.cs" Link="Actual/ModInfo.cs" />
   </ItemGroup>
 </Project>

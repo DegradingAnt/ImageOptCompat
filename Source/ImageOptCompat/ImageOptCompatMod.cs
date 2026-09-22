@@ -26,7 +26,7 @@ public sealed class ImageOptCompatMod : Mod
         Settings = GetSettings<ImageOptCompatSettings>();
 
         try { ImageOptActive = ModsConfig.IsActive("dev.soeur.imageopt"); }
-        catch (Exception e) { ImageOptActive = false; Log.Warning($"[ImageOptCompat] could not query Image Opt: {e.Message}"); }
+        catch (Exception e) { ImageOptActive = false; Log.Warning($"{ModInfo.Tag} could not query Image Opt: {e.Message}"); }
 
         var harmony = new Harmony("degradingant.imageoptcompat");
 
@@ -52,7 +52,7 @@ public sealed class ImageOptCompatMod : Mod
 
         if (!ImageOptActive)
         {
-            Log.Message("[ImageOptCompat] Image Opt is not active - Image Opt features stay off; "
+            Log.Message(ModInfo.Tag + " Image Opt is not active - Image Opt features stay off; "
                       + "early-UI and null-texture guards remain.");
             return;
         }
@@ -61,7 +61,7 @@ public sealed class ImageOptCompatMod : Mod
         CheckFasterGameLoading();
         if (FglHasImageOptSupport == true) CheckFglSettings();
         CheckVersions();
-        Log.Message("[ImageOptCompat] active alongside Image Opt.");
+        Log.Message(ModInfo.Tag + " active alongside Image Opt.");
 
         // Sweep before textures are requested, so a stale file is never served.
         if (Settings.sweepOrphanZstd) OrphanSweep.Run();
@@ -76,14 +76,14 @@ public sealed class ImageOptCompatMod : Mod
     {
         bool fglActive;
         try { fglActive = ModsConfig.IsActive("Taranchuk.FasterGameLoading"); }
-        catch (Exception e) { Log.Warning($"[ImageOptCompat] could not query Faster Game Loading: {e.Message}"); return; }
+        catch (Exception e) { Log.Warning($"{ModInfo.Tag} could not query Faster Game Loading: {e.Message}"); return; }
 
         if (!fglActive) { FglHasImageOptSupport = null; return; }
 
         FglHasImageOptSupport = AccessTools.TypeByName("FasterGameLoading.ImageOptEarlyLoadCoordinator") != null;
         if (FglHasImageOptSupport == true) return;
 
-        Log.Warning("[ImageOptCompat] Faster Game Loading is active but has no Image Opt compatibility layer. "
+        Log.Warning(ModInfo.Tag + " Faster Game Loading is active but has no Image Opt compatibility layer. "
                   + "Use 'Faster Game Loading - Continued (Preview)', or disable Faster Game Loading. "
                   + "Without it, Image Opt can black-screen during loading.");
     }
@@ -97,7 +97,7 @@ public sealed class ImageOptCompatMod : Mod
             AccessTools.TypeByName("FasterGameLoading.FasterGameLoadingSettings"));
         if (FglUntestedSettings == null) return;
 
-        Log.Warning($"[ImageOptCompat] Faster Game Loading settings differ from the tested configuration or could not be checked "
+        Log.Warning($"{ModInfo.Tag} Faster Game Loading settings differ from the tested configuration or could not be checked "
                   + $"({FglUntestedSettings}). This combination has not been tested with Image Opt. "
                   + "If loading misbehaves, reset Faster Game Loading's settings to default first.");
     }
@@ -123,7 +123,7 @@ public sealed class ImageOptCompatMod : Mod
         var notes = VersionCheck.BuildUntestedNotes(installed);
         UntestedVersions = notes.Count == 0 ? null : string.Join("; ", notes);
         foreach (var note in notes)
-            Log.Warning($"[ImageOptCompat] {note}; it may still work, but an untested version can "
+            Log.Warning($"{ModInfo.Tag} {note}; it may still work, but an untested version can "
           + "silently disable parts of this patch.");
     }
 
@@ -134,7 +134,7 @@ public sealed class ImageOptCompatMod : Mod
         catch { return null; }
     }
 
-    public override string SettingsCategory() => "ImageOptCompat";
+    public override string SettingsCategory() => ModInfo.Name;
 
     public override void DoSettingsWindowContents(Rect inRect)
     {
@@ -293,11 +293,11 @@ public sealed class ImageOptCompatMod : Mod
     /// so the result survives even when the on-screen toast cannot be shown.
     private static void Notify(string message)
     {
-        Log.Message("[ImageOptCompat] " + message);
+        Log.Message(ModInfo.Tag + " " + message);
 
         try
         {
-            Messages.Message("[ImageOptCompat] " + message, MessageTypeDefOf.TaskCompletion, historical: false);
+            Messages.Message(ModInfo.Tag + " " + message, MessageTypeDefOf.TaskCompletion, historical: false);
         }
         catch (Exception)
         {
@@ -370,7 +370,7 @@ public sealed class ImageOptCompatMod : Mod
             {
                 var scan = AssetRequesterScan.Report(MissingTextureReport.RecordedPaths());
                 GUIUtility.systemCopyBuffer = scan;
-                Log.Message("[ImageOptCompat] asset owner scan:" + Environment.NewLine + scan);
+                Log.Message(ModInfo.Tag + " asset owner scan:" + Environment.NewLine + scan);
                 Notify("scan copied to the clipboard and written to the log.");
             }
         }

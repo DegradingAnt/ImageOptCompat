@@ -5,7 +5,7 @@
   <packageId>degradingant.imageoptcompat</packageId>
   <url>https://github.com/DegradingAnt/ImageOptCompat</url>
   <supportedVersions><li>1.6</li></supportedVersions>
-  <modVersion>0.2.0</modVersion>
+  <modVersion>0.3.0</modVersion>
 
   <!-- Both mods this patches are REQUIRED - it is a patch for that combination. A missing dependency
        shows a warning in the mod list but does not stop the game loading, so disabling one to bisect a
@@ -77,7 +77,7 @@ FIXES FOR IMAGE OPT + FASTER GAME LOADING
 FIXES THAT WORK WITHOUT IMAGE OPT
 These are not Image Opt faults. They stay on even when Image Opt is inactive, and each can be switched off in the mod settings.
 - Failed-audio guard - checks both Unity and RimWorld's decoder state before a sound grain reads a failed clip's length. Failed clips use one reusable silent clip, including folder and custom grains; Loading and Unloaded clips are preserved.
-- Null-texture guard - Unity writes "null texture passed to GUI.DrawTexture" every time a mod hands it a missing or destroyed texture. Unity writes that line itself, so the game's own repeat-message filter never sees it and it is written once per call, every frame, for the whole session. On a 1,484-mod load it was measured at 222,128 lines in one session, which is 94 percent of the entire log. Drawing and ticking share one thread, so the cost comes out of tick rate and appears as stutter and low TPS above 1x speed, while 1x looks fine. The patch skips invalid repaint draws by default, preserving the empty appearance even when alpha blending is disabled. It samples the first eight intercepted draws and reports distinct observed callers from that sample. An optional magenta placeholder makes missing textures visible, and an opt-in deep diagnostic collects per-caller counts.
+- Null-texture guard - Unity writes "null texture passed to GUI.DrawTexture" every time a mod hands it a missing or destroyed texture. Unity writes that line itself, so the game's own repeat-message filter never sees it and it is written once per call, every frame, for the whole session. On a 1,484-mod load it was measured at 222,128 lines in one session, which is 94 percent of the entire log. Drawing and ticking share one thread, so the cost comes out of tick rate and appears as stutter and low TPS above 1x speed, while 1x looks fine. The patch skips invalid repaint draws by default, preserving the empty appearance even when alpha blending is disabled. It samples the first eight intercepted draws and, for each, names the nearest mod on the call stack, looking through Harmony-patched methods. When no single mod can be named, it says so. An optional magenta placeholder makes missing textures visible, and an opt-in deep diagnostic collects per-caller counts.
 
 ALSO PATCHES THESE OTHER MODS
 Each is only touched if it is installed. If it is not, that part does nothing.
@@ -86,10 +86,11 @@ Each is only touched if it is installed. If it is not, that part does nothing.
 - Worldbuilder - reads its own settings before they have loaded, with the same result. It is held back until they exist.
 
 KNOWN GAPS - please read
-- The vehicle livery has not been visually confirmed yet.
+- The vehicle livery has not been visually confirmed yet. In a full boot of the 1,484-mod list, 552 vehicle textures were made readable without an error, but nobody has opened a paint page to look.
 - A mod calling the five-argument GetPixels overload directly is not covered - that one method is native and cannot be patched. The standard overloads are.
-- The null-texture guard has not yet been confirmed in a running game. It is covered by tests and the patch targets are checked against the installed game's own assemblies, but the measured before-and-after log count is still to come.
-- Parts that need a live Unity object, such as the pixel copy itself, still need an in-game check. Patch signatures are checked against the installed assemblies, and a separate regression runner tests real Harmony detours on RimWorld's Mono with native operations replaced by stand-ins.
+- Null-draw reports name the nearest mod on the call stack. That is usually the mod to report to, but a missing texture can also come from elsewhere, such as a def that another mod supplied.
+- No TPS figure has been measured. In a two-hour session on the same list, Unity logged 0 null-texture warnings. The session that found the flood logged 222,128.
+- Automated tests cannot run Unity's native rendering or audio. They use stand-ins, check patch signatures against the installed game, and run real Harmony patches on RimWorld's own Mono runtime.
 
 I used AI tools during development, then checked the changes against the source and tests. MIT licensed; fixes welcome.
 
