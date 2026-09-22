@@ -9,5 +9,6 @@
     <PackageReference Include="Lib.Harmony" Version="2.4.2" />
     <Compile Include="../ImageOptCompat/MissingTextureReport.cs" Link="Actual/MissingTextureReport.cs" />
     <Compile Include="../ImageOptCompat/FailedAudioClipGuard.cs" Link="Actual/FailedAudioClipGuard.cs" />
+    <Compile Include="../ImageOptCompat/ModAttribution.cs" Link="Actual/ModAttribution.cs" />
   </ItemGroup>
 </Project>

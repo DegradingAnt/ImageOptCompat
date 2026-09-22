@@ -43,6 +43,7 @@ internal static class Program
             CheckAssetTypes();
             CheckTextures();
             CheckAudio();
+            CheckAttribution(h);
             Console.WriteLine("All " + checks + " Mono/Harmony checks passed.");
             return 0;
         }
@@ -115,6 +116,41 @@ internal static class Program
         ImageOptCompatMod.Settings.guardFailedAudioClips = true;
     }
 
+    /// The first live boot blamed WanderJoinsPlus for every null draw. Two faults combined: a
+    /// patched method's frame reads as MonoMod.Utils.DynamicMethodDefinition unless resolved
+    /// through Harmony, and Harmony's assembly is listed under every mod that ships a copy of it.
+    /// This reproduces both on the game's own Mono and Harmony, so neither can come back unseen.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CheckAttribution(Harmony h)
+    {
+        var fixture = new ModContentPack { Name = "Fixture Mod", PackageId = "fixture.mod" };
+        fixture.assemblies.loadedAssemblies.Add(typeof(Program).Assembly);
+        var harmonyMod = new ModContentPack { Name = "Harmony", PackageId = "brrainz.harmony" };
+        var bundler = new ModContentPack { Name = "WanderJoinsPlus", PackageId = "ogliss.wanderjoinsplus" };
+        harmonyMod.assemblies.loadedAssemblies.Add(typeof(Harmony).Assembly);
+        bundler.assemblies.loadedAssemblies.Add(typeof(Harmony).Assembly);
+        LoadedModManager.RunningMods.AddRange(new[] { harmonyMod, fixture, bundler });
+        ModAttribution.Reset();
+
+        h.Patch(typeof(GUI).GetMethod(nameof(GUI.DrawTexture)),
+            prefix: new HarmonyMethod(typeof(ImageOptCompat.Probe.AttributionProbe).GetMethod(nameof(ImageOptCompat.Probe.AttributionProbe.Prefix))));
+        FixtureMod.Window.DoContents();
+
+        Check(ImageOptCompat.Probe.AttributionProbe.Resolved, "the patched draw frame maps back to GUI.DrawTexture through Harmony");
+        Check(ImageOptCompat.Probe.AttributionProbe.NaiveType != typeof(GUI).FullName,
+            "a plain GetMethod() read of that frame does not see GUI (it sees: "
+            + (ImageOptCompat.Probe.AttributionProbe.NaiveType ?? "null") + ")");
+        Check(ImageOptCompat.Probe.AttributionProbe.Seen == ("FixtureMod.Window.DoContents", "Fixture Mod (fixture.mod)"),
+            "null-draw attribution names the calling mod frame, got " + ImageOptCompat.Probe.AttributionProbe.Seen);
+        var harmonyOwner = ModAttribution.Describe(typeof(Harmony));
+        Check(!ModAttribution.NamesOneMod(harmonyOwner) && !harmonyOwner.Contains("WanderJoinsPlus"),
+            "Harmony's assembly is credited to no single mod, got " + harmonyOwner);
+
+        FixtureMod.Loader.LoadIcon();
+        Check(MissingTextureReport.BuildReport().Contains("Fixture Mod (fixture.mod) at FixtureMod.Loader.LoadIcon"),
+            "a code-driven missing texture is attributed through the real Log.Error detour");
+    }
+
     // A separate process mode demonstrates why the former production design is unsafe.
     public static void TexturePostfix(ref Texture2D? __result) { }
     public static void AudioPostfix(ref AudioClip? __result) { }
@@ -133,5 +169,32 @@ internal static class Program
     {
         ContentFinder<Texture2D>.Get(path);
         ContentFinder<AudioClip>.Get(path);
+    }
+}
+
+namespace ImageOptCompat.Probe
+{
+    /// A Harmony prefix standing where production's null-texture prefix stands. It lives under the
+    /// ImageOptCompat namespace so the walk treats it as plumbing, exactly as it treats ours.
+    public static class AttributionProbe
+    {
+        public static (string Site, string Owner) Seen;
+        public static bool Resolved;
+        public static string? NaiveType;
+
+        public static void Prefix()
+        {
+            var trace = new System.Diagnostics.StackTrace(false);
+            Seen = ModAttribution.FindCaller(trace, Array.Empty<string>());
+            for (var i = 0; i < trace.FrameCount; i++)
+            {
+                var frame = trace.GetFrame(i);
+                var resolved = ModAttribution.FrameMethod(frame);
+                if (resolved?.DeclaringType != typeof(GUI) || resolved.Name != nameof(GUI.DrawTexture)) continue;
+                Resolved = true;
+                NaiveType = frame.GetMethod()?.DeclaringType?.FullName;
+                break;
+            }
+        }
     }
 }

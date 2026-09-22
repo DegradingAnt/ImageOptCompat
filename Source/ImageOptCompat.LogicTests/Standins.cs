@@ -4,7 +4,12 @@ namespace HarmonyLib {
  [AttributeUsage(AttributeTargets.Class)]
  public sealed class HarmonyPatch(Type type, string method, params Type[] parameters) : Attribute {}
  public sealed class HarmonyMethod { public HarmonyMethod(Type type, string method) {} public HarmonyMethod(MethodInfo? method) {} }
- public sealed class Harmony { public void Patch(MethodBase method, HarmonyMethod? prefix=null, HarmonyMethod? postfix=null) {} }
+ public sealed class Harmony {
+  public void Patch(MethodBase method, HarmonyMethod? prefix=null, HarmonyMethod? postfix=null) {}
+  // No detours exist on the test host, so every frame is its own original. The real mapping is
+  // exercised on the game's Mono by ImageOptCompat.MonoTests.
+  public static MethodBase? GetOriginalMethodFromStackframe(System.Diagnostics.StackFrame frame) => frame.GetMethod();
+ }
  public static class AccessTools {
   public static bool HideImageOpt;
   public static Type? TypeByName(string name) => HideImageOpt && name == "ImageOpt.Texture2DPatch" ? null : typeof(AccessTools).Assembly.GetType(name);

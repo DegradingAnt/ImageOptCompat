@@ -364,7 +364,7 @@ public sealed class ImageOptCompatMod : Mod
         {
             if (recorded == 0)
             {
-                Notify("nothing recorded yet. Turn on \"Report missing textures\" and restart first.");
+                Notify(NothingToScanMessage());
             }
             else
             {
@@ -375,4 +375,17 @@ public sealed class ImageOptCompatMod : Mod
             }
         }
     }
+
+    /// Why a scan has nothing to work on. Three different situations, and only one of them needs
+    /// the setting turned on. The old single message told players to turn on a setting that was
+    /// already on, when the truth was simply that nothing was missing. The hook is installed at
+    /// startup whenever the path repair is active, so a restart is needed only when it is not.
+    private static string NothingToScanMessage() =>
+        !Settings.reportMissingTextures
+            ? "nothing recorded yet. Turn on \"Report missing textures\" first"
+              + (MissingTextureReport.Installed ? "." : ", then restart the game.")
+            : MissingTextureReport.Installed
+                ? "no missing textures were recorded this session, so there is nothing to scan."
+                : "\"Report missing textures\" is on, but its hook was not installed at startup. "
+                  + "Restart the game to start recording.";
 }

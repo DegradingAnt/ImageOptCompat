@@ -215,14 +215,34 @@ public sealed class RuntimeLogicTests
         Assert.That(NullTextureGuard.Substituted, Is.Zero);
     }
 
+    private static void DrawNullFromFixtureMod() =>
+        FixtureMod.Window.DrawNull(() => { Texture? texture = null; Draw(ref texture); });
+
     [Test]
     public void RepeatedCallerExhaustsNormalSamplingBudget()
     {
+        OwnTestAssembly("Fixture Mod", "fixture.mod");
         UnityData.DiagnosticChecks = 0;
         UnityData.MeasureDiagnosticChecks = true;
-        for (var i = 0; i < 1000; i++) { Texture? texture = null; Draw(ref texture); }
+        for (var i = 0; i < 1000; i++) DrawNullFromFixtureMod();
         Assert.That(UnityData.DiagnosticChecks, Is.EqualTo(8));
         Assert.That(Log.Warnings, Has.Count.EqualTo(1));
+        // WHO is named matters as much as how often. The first live boot also logged exactly one
+        // line, and that line blamed a mod that had nothing to do with it.
+        Assert.That(Log.Warnings[0], Does.Contain("drawn from FixtureMod.Window.DrawNull in Fixture Mod (fixture.mod)"));
+    }
+
+    /// The live-boot case: the only candidate frame belongs to an assembly several mods list, as
+    /// Harmony's does. The warning must say no single mod was found, and name neither claimant.
+    [Test]
+    public void NullDrawWithNoSingleOwnerNamesNoMod()
+    {
+        OwnTestAssembly("Harmony", "brrainz.harmony");
+        OwnTestAssembly("WanderJoinsPlus", "ogliss.wanderjoinsplus");
+        DrawNullFromFixtureMod();
+        Assert.That(Log.Warnings, Has.Count.EqualTo(1));
+        Assert.That(Log.Warnings[0], Does.Contain("No single mod's code is on the call stack"));
+        Assert.That(Log.Warnings[0], Does.Not.Contain("WanderJoinsPlus").And.Not.Contain("brrainz"));
     }
 
     [Test]
@@ -246,21 +266,37 @@ public sealed class RuntimeLogicTests
     [Test]
     public void DeepDiagnosticCountsEveryDrawButLogsOnlyOnce()
     {
+        OwnTestAssembly("Fixture Mod", "fixture.mod");
         ImageOptCompatMod.Settings.nullTextureDeepDiagnostic = true;
-        for (var i = 0; i < 20; i++) { Texture? texture = null; Draw(ref texture); }
+        for (var i = 0; i < 20; i++) DrawNullFromFixtureMod();
         var tally = (IDictionary)typeof(NullTextureGuard).GetField("Tally", Statics)!.GetValue(null)!;
         Assert.That(tally.Values.Cast<int>().Sum(), Is.EqualTo(20));
+        // The per-mod count is the point of the deep diagnostic, so the row must be the right mod.
+        Assert.That(tally["Fixture Mod (fixture.mod) -> FixtureMod.Window.DrawNull"], Is.EqualTo(20));
         Assert.That(Log.Warnings, Has.Count.EqualTo(1));
     }
 
     [Test]
     public void AssemblyAttributionFindsOwningMod()
     {
-        var pack = new ModContentPack { Name = "Owned", PackageId = "owned.mod" };
-        pack.assemblies.loadedAssemblies.Add(typeof(RuntimeLogicTests).Assembly);
-        LoadedModManager.RunningMods.Add(pack);
-        Assert.That(ModAttribution.Describe(typeof(RuntimeLogicTests)), Is.EqualTo("Owned (owned.mod)"));
+        OwnTestAssembly("Owned", "owned.mod");
+        var owner = ModAttribution.Describe(typeof(RuntimeLogicTests));
+        Assert.That(owner, Is.EqualTo("Owned (owned.mod)"));
+        Assert.That(ModAttribution.NamesOneMod(owner), Is.True);
         Assert.That(ModAttribution.Describe(null), Is.EqualTo("unknown mod"));
+        Assert.That(ModAttribution.NamesOneMod(ModAttribution.Describe(null)), Is.False);
+        Assert.That(ModAttribution.NamesOneMod(ModAttribution.CoreLabel), Is.False);
+        Assert.That(ModAttribution.NamesOneMod(ModAttribution.Describe(typeof(Assert))), Is.False);
+
+        // A second mod listing the SAME assembly: what Assembly.LoadFrom does for each of the 104
+        // mods in the test install that ship their own 0Harmony.dll. It belongs to neither. The
+        // old last-wins map returned "WanderJoinsPlus" here.
+        OwnTestAssembly("WanderJoinsPlus", "ogliss.wanderjoinsplus");
+        ModAttribution.Reset();
+        var shared = ModAttribution.Describe(typeof(RuntimeLogicTests));
+        Assert.That(shared, Does.Contain("shared library: 2 mods ship a copy"));
+        Assert.That(shared, Does.Not.Contain("Owned").And.Not.Contain("WanderJoinsPlus"));
+        Assert.That(ModAttribution.NamesOneMod(shared), Is.False);
     }
 
     private static Texture2D Native()
@@ -530,9 +566,24 @@ public sealed class RuntimeLogicTests
         Assert.That(SuppressedCount(), Is.Zero);
     }
 
+    /// Was "returns a non-empty owner", which the live-boot misattribution passed. No def asked
+    /// here, so the report must read the stack and name the mod code that asked - not the logging
+    /// and lookup frames in between, and not this test.
     [Test]
-    public void DescribeCallerReturnsANonEmptyOwner()
+    public void CodeDrivenMissingTextureNamesTheCallingMod()
     {
-        Assert.That(ModAttribution.DescribeCaller(), Is.Not.Empty);
+        OwnTestAssembly("Fixture Mod", "fixture.mod");
+        ImageOptCompatMod.Settings.reportMissingTextures = true;
+        MissingTextureReport.TryInstall(new());
+        FixtureMod.Loader.LoadMissingIcon();
+        Assert.That(MissingTextureReport.BuildReport(),
+            Does.Contain("Fixture Mod (fixture.mod) at FixtureMod.Loader.LoadMissingIcon"));
+    }
+
+    private static void OwnTestAssembly(string name, string packageId)
+    {
+        var pack = new ModContentPack { Name = name, PackageId = packageId };
+        pack.assemblies.loadedAssemblies.Add(typeof(RuntimeLogicTests).Assembly);
+        LoadedModManager.RunningMods.Add(pack);
     }
 }

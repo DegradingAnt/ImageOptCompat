@@ -26,6 +26,13 @@ namespace UnityEngine
         }
         public static AudioClip Create(string name, int samples, int channels, int frequency, bool stream) => new() { name = name, seconds = (float)samples / frequency };
     }
+    public static class GUI
+    {
+        public static int Draws;
+        // Patched by the attribution check exactly as production patches the real one.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void DrawTexture(Texture2D? image) { Draws++; }
+    }
     public class ResourcesAPI
     {
         public static readonly ResourcesAPI Instance = new();
@@ -47,7 +54,9 @@ namespace RuntimeAudioClipLoader
 namespace Verse
 {
     public static class UnityData { public static bool IsInMainThread = true; }
-    public sealed class ModContentPack { public string Name = "mod"; public string PackageId = "test.mod"; }
+    public sealed class ModAssemblies { public List<System.Reflection.Assembly> loadedAssemblies = new(); }
+    public sealed class ModContentPack { public string Name = "mod"; public string PackageId = "test.mod"; public ModAssemblies assemblies = new(); }
+    public static class LoadedModManager { public static readonly List<ModContentPack> RunningMods = new(); }
     public class Def { public string defName = "FixtureDef"; public ModContentPack? modContentPack; }
     public static class ContentFinderRequester { public static Def? requester; }
     public static class ContentFinder<T> where T : class
@@ -102,9 +111,19 @@ namespace ImageOptCompat
         public static Settings Settings = new();
         public static bool ImageOptActive = true;
     }
-    internal static class ModAttribution
+}
+// Plays the part of another mod's code, calling through the same kind of patched methods as in
+// the live boot. NoInlining keeps each as its own frame; attribution reads frames.
+namespace FixtureMod
+{
+    public static class Window
     {
-        internal static string DescribeCaller() => "test caller";
-        internal static string Describe(Type type) => "test mod";
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void DoContents() => UnityEngine.GUI.DrawTexture(null);
+    }
+    public static class Loader
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void LoadIcon() { _ = Verse.ContentFinder<UnityEngine.Texture2D>.Get("FixtureMod/MissingIcon"); }
     }
 }

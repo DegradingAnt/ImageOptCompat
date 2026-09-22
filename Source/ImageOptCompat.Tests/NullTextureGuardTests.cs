@@ -114,6 +114,9 @@ public class NullTextureGuardTests
     [TestCase("HarmonyLib.MethodPatcher")]
     [TestCase("ImageOptCompat.NullTextureGuard")]
     [TestCase("System.Collections.Generic.List`1")]
+    // The type every Harmony-patched frame reports on RimWorld's Mono. The first live boot named
+    // it as the caller of every null draw.
+    [TestCase("MonoMod.Utils.DynamicMethodDefinition")]
     public void PlumbingFramesAreSkipped(string type) =>
         Assert.That(NullTextureGuard.IsPlumbingFrame(type), Is.True);
 

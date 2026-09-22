@@ -13,8 +13,9 @@ namespace ImageOptCompat;
 ///
 /// WHY THIS EXISTS. RimWorld's error line is "Could not load Texture2D at 'X' in any active mod or
 /// in base resources." It appends "for def 'Y'" only when a def triggered the lookup. Code that
-/// calls ContentFinder directly leaves that blank, so the line names no owner. Measured in one
-/// session: 2,625 such lines, every one of them ownerless.
+/// calls ContentFinder directly leaves that blank, so the line names no owner. An early session
+/// logged 2,625 such lines. Those particular ones were this patch's own former generic hooks (see
+/// ModAttribution.DescribeCaller), but any mod that calls ContentFinder directly leaves the same gap.
 ///
 /// MissingTextureReport reads the call stack, which names the assembly that made the call. That is
 /// not always the mod at fault: a shared UI helper shows up as the caller for everyone who uses it.

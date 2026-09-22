@@ -19,10 +19,10 @@ namespace ImageOptCompat;
 /// throughput. That is why the symptom is "fine at 1x, stutters and loses TPS above it", and why
 /// nothing measuring per-pawn tick cost ever sees it: the work is not in the tick at all.
 ///
-/// The guard substitutes BaseContent.BadTex so Unity is never handed null. That is graceful
-/// degradation, not log suppression - the failure becomes VISIBLE as the vanilla magenta
-/// bad-texture square instead of an invisible nothing, and the first few distinct call sites are
-/// each reported ONCE with a stack trace so the mod at fault can be named and fixed at source.
+/// By default the guard skips the invalid repaint draw, which looks exactly like Unity's own null
+/// branch (nothing is drawn) minus the warning. The vanilla magenta bad-texture square is an opt-in
+/// setting for finding the missing element on screen. Either way the first few distinct call sites
+/// are each reported ONCE, naming the nearest mod on the stack, so the fault can be fixed at source.
 ///
 /// Scope: this is NOT established to be an Image Opt bug. Image Opt's own load paths do recover
 /// (TextureLoadPatch.PrefixV1 and _LoadTextureSync both fall back to VanillaLoadTexture), though
@@ -73,12 +73,6 @@ internal static class NullTextureGuard
         attempts++;
         return true;
     }
-
-    /// Frames from these namespaces are plumbing, never the culprit - walk past them.
-    private static readonly string[] SkipNamespacePrefixes =
-    {
-        "UnityEngine.", "HarmonyLib.", "ImageOptCompat.", "System.",
-    };
 
     /// Fail-open: a guard that throws during construction would take the whole mod down with it,
     /// and what it guards against is a performance problem, not a correctness one.
@@ -243,11 +237,20 @@ internal static class NullTextureGuard
 
             if (ReportedSites.Count >= MaxReportedSites || !ReportedSites.Add(key)) return;
 
-            Log.Warning($"[ImageOptCompat] null texture drawn by {site}, shipped by {owner}. Guarded the "
-                      + "draw so Unity stops logging it every frame. This is a missing or destroyed "
-                      + "texture in that mod, not a rendering fault. "
-                      + $"Normal diagnostics sample only the first {MaxReportedSites} null draws; turn on the "
-                      + "deep diagnostic in this patch's settings for a full per-mod count.");
+            // Name a mod only when the stack really contains one. The first live boot printed a
+            // confident "shipped by <mod>" for Harmony's own generated frame, which pointed players
+            // at an innocent author. "Nearest mod on the stack" is what the walk can actually prove.
+            var who = ModAttribution.NamesOneMod(owner)
+                ? $"null texture drawn from {site} in {owner}. Guarded the draw so Unity stops logging it "
+                  + "every frame. The texture is missing or was destroyed; that mod is the nearest mod code "
+                  + "on the call stack and usually the one to report it to. "
+                : $"null texture drawn from {site} ({owner}). Guarded the draw so Unity stops logging it "
+                  + "every frame. No single mod's code is on the call stack, so the owner cannot be named "
+                  + "from here. ";
+
+            Log.Warning("[ImageOptCompat] " + who
+                      + $"Only the first {MaxReportedSites} null draws are sampled; turn on the deep diagnostic "
+                      + "in this patch's settings for a full per-mod count.");
         }
         catch (Exception e)
         {
@@ -290,37 +293,16 @@ internal static class NullTextureGuard
         return sb.ToString();
     }
 
-    /// The offending method, and the mod that shipped it.
-    private static (string Site, string Owner) FindCaller()
-    {
-        // fNeedFileInfo: false - symbols are absent for Workshop mods anyway, and reading them
-        // would turn a costly call into an unacceptable one.
-        var trace = new StackTrace(fNeedFileInfo: false);
+    /// The offending method, and the mod that shipped it. The walk lives in ModAttribution and is
+    /// shared with the missing-texture report, so both see through Harmony's generated frames the
+    /// same way. fNeedFileInfo: false - symbols are absent for Workshop mods anyway, and reading
+    /// them would turn a costly call into an unacceptable one.
+    private static (string Site, string Owner) FindCaller() =>
+        ModAttribution.FindCaller(new StackTrace(fNeedFileInfo: false), NoExtraSkips);
 
-        for (var i = 0; i < trace.FrameCount; i++)
-        {
-            var method = trace.GetFrame(i)?.GetMethod();
-            var type = method?.DeclaringType;
-            if (type == null) continue;
+    private static readonly string[] NoExtraSkips = Array.Empty<string>();
 
-            var full = type.FullName ?? string.Empty;
-            if (IsPlumbingFrame(full)) continue;
-
-            return ($"{full}.{method!.Name}", ModAttribution.Describe(type));
-        }
-
-        return ("an unidentified caller", "unknown mod");
-    }
-
-    /// True for frames that are never the culprit - Unity's own draw code, Harmony's generated
-    /// wrappers, this patch, and the BCL. Everything else is a mod, and a mod is what we want named.
-    internal static bool IsPlumbingFrame(string typeFullName)
-    {
-        foreach (var prefix in SkipNamespacePrefixes)
-        {
-            if (typeFullName.StartsWith(prefix, StringComparison.Ordinal)) return true;
-        }
-
-        return false;
-    }
+    /// True for frames that are never the culprit - Unity's own draw code, Harmony's and MonoMod's
+    /// generated code, this patch, and the BCL.
+    internal static bool IsPlumbingFrame(string typeFullName) => ModAttribution.IsPlumbing(typeFullName);
 }

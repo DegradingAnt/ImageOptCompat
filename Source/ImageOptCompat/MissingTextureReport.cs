@@ -114,7 +114,10 @@ internal static class MissingTextureReport
         var trace = new System.Diagnostics.StackTrace(false);
         for (var i = 0; i < trace.FrameCount; i++)
         {
-            var method = trace.GetFrame(i)?.GetMethod();
+            // Seen through Harmony: if any mod patches ContentFinder<T>.Get, its frame is a
+            // generated replacement whose plain GetMethod() is not "Get" on ContentFinder<>, and
+            // this check would silently switch the repair off for that whole mod list.
+            var method = ModAttribution.FrameMethod(trace.GetFrame(i));
             var type = method?.DeclaringType;
             if (string.Equals(method?.Name, "Get", StringComparison.Ordinal) && type?.IsGenericType == true
                 && type.GetGenericTypeDefinition() == typeof(ContentFinder<>)) return true;
@@ -156,8 +159,7 @@ internal static class MissingTextureReport
                 Def = def?.defName ?? "(no def - requested directly by code)",
 
                 // With no def there is nothing to attribute to, so read the stack instead.
-                // Without this, every code-driven lookup reported "unknown mod", which is the
-                // majority of them: 2,625 in the measured session.
+                // Without this, every code-driven lookup reported "unknown mod".
                 Mod = def == null
                     ? ModAttribution.DescribeCaller()
                     : def.modContentPack == null
