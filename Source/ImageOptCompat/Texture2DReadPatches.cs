@@ -37,6 +37,10 @@ internal static class Texture2DReadPatches
 
     internal static int Served { get; private set; }
 
+    /// Whether Image Opt's texture record was found, for the startup check. Resolving it early is
+    /// harmless: the lookup is the same one the first read would make.
+    internal static bool ImageOptTrackingFound => NativeIds() != null;
+
     /// Image Opt's own record of every texture it created natively (TextureLoadPatch.cs:81) - more
     /// reliable than Unity's native isReadable, which is exactly the value in question.
     private static HashSet<int>? NativeIds()

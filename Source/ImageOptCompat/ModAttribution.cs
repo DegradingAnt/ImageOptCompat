@@ -82,6 +82,43 @@ internal static class ModAttribution
         return byAssembly;
     }
 
+    /// The game's own assembly, recognised BEFORE the mod map. In the test install, 50 mod folders
+    /// ship full-size copies of Assembly-CSharp.dll. If LoadFrom hands one of them the loaded game
+    /// assembly, the map would call RimWorld's own code a library those mods share. Settable only so
+    /// a test can stand in for the game assembly; null when the game assembly is not loaded (tests).
+    ///
+    /// Resolved lazily, not in a static initializer: an initializer that touches a game type throws
+    /// wherever the game assembly is absent, and that takes the whole class down with it. The
+    /// unit-test suite caught exactly that.
+    internal static Assembly? CoreAssembly
+    {
+        get
+        {
+            if (coreResolved) return core;
+            try { core = GameAssemblyOrNull(); }
+            catch (Exception) { core = null; }
+            coreResolved = true;
+            return core;
+        }
+        set
+        {
+            core = value;
+            coreResolved = true;
+        }
+    }
+
+    private static Assembly? core;
+    private static bool coreResolved;
+
+    /// Separate and never inlined, so a missing game assembly fails inside the getter's try instead
+    /// of while the getter itself is compiled.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Assembly? GameAssemblyOrNull()
+    {
+        var asm = typeof(Log).Assembly;
+        return string.Equals(asm.GetName().Name, "Assembly-CSharp", StringComparison.Ordinal) ? asm : null;
+    }
+
     /// The owning mod's display name and packageId, or a plain statement that it is unknown.
     /// Never throws and never returns null - this runs inside diagnostics.
     internal static string Describe(Type? type)
@@ -91,6 +128,7 @@ internal static class ModAttribution
         try
         {
             var asm = type.Assembly;
+            if (CoreAssembly != null && ReferenceEquals(asm, CoreAssembly)) return CoreLabel;
             if (Map().TryGetValue(asm, out var label)) return label;
 
             // RimWorld's own types, Unity's, and anything loaded outside a ModContentPack.

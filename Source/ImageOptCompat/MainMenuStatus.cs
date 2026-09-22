@@ -88,7 +88,7 @@ internal static class MainMenuStatus
     {
         var problems = Report.ShownCount;
         var label = problems == 0
-            ? $"{ModInfo.Name}: no problems found"
+            ? $"{ModInfo.Name}: {StartupCheck.Summary()}"
             : $"{ModInfo.Name}: {problems} problem(s) - hover for details";
 
         var oldFont = Text.Font;
@@ -105,6 +105,23 @@ internal static class MainMenuStatus
 
         if (!Mouse.IsOver(rect)) return;
         Widgets.DrawHighlight(rect);
-        TooltipHandler.TipRegion(rect, Report.ShownSummary());
+        TooltipHandler.TipRegion(rect, Tooltip());
+    }
+
+    /// Every startup check with its outcome, then any problem reported since loading.
+    private static string Tooltip()
+    {
+        var text = new StringBuilder();
+        text.AppendLine("Startup checks:");
+        foreach (var result in StartupCheck.Results) text.AppendLine(result.ToString());
+
+        if (Report.ShownCount > 0)
+        {
+            text.AppendLine();
+            text.AppendLine("Problems this session:");
+            text.Append(Report.ShownSummary());
+        }
+
+        return text.ToString().TrimEnd();
     }
 }

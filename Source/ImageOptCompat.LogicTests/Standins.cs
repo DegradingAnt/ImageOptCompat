@@ -6,6 +6,7 @@ namespace HarmonyLib {
  public sealed class HarmonyMethod { public HarmonyMethod(Type type, string method) {} public HarmonyMethod(MethodInfo? method) {} }
  public sealed class Harmony {
   public void Patch(MethodBase method, HarmonyMethod? prefix=null, HarmonyMethod? postfix=null) {}
+  public void Unpatch(MethodBase original, MethodInfo patch) {}
   // No detours exist on the test host, so every frame is its own original. The real mapping is
   // exercised on the game's Mono by ImageOptCompat.MonoTests.
   public static MethodBase? GetOriginalMethodFromStackframe(System.Diagnostics.StackFrame frame) => frame.GetMethod();

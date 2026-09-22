@@ -24,6 +24,10 @@ internal static class EarlyUiGuards
     private static volatile bool worldbuilderReady;
 
     internal static int InstalledCount { get; private set; }
+
+    /// Guard targets whose mod is present. Equal to InstalledCount when every guard went in; zero
+    /// when neither mod is active, which is fine and not a failure.
+    internal static int FoundCount { get; private set; }
     internal static int VefSkips { get; private set; }
     internal static int WorldbuilderSkips { get; private set; }
 
@@ -31,6 +35,7 @@ internal static class EarlyUiGuards
     {
         if (harmony == null) return;
         InstalledCount = 0;
+        FoundCount = 0;
 
         // --- VEF: Restart.VFE_Dev_Restart is a KeyBindingDef in a [DefOf] class, null pre-init.
         TryPatch(harmony,
@@ -63,9 +68,19 @@ internal static class EarlyUiGuards
         {
             var type = AccessTools.TypeByName(typeName);
             if (type == null) return;                       // mod absent - nothing to guard
+            FoundCount++;
+
+            // The mod IS present but has changed shape: a renamed method or field. This used to
+            // return silently, leaving the guard off with no sign of it - the one failure this
+            // patch keeps warning about everywhere else. Fail open, but say so.
             var target = AccessTools.Method(type, methodName);
-            if (target == null) return;
-            if (!prepare()) return;                         // could not resolve the field - fail open
+            if (target == null || !prepare())
+            {
+                Report.Write(ReportKind.Problem, $"{typeName} is active but could not be guarded; that mod may have "
+                                               + "been updated. Its loading-screen error can come back until this "
+                                               + "patch is updated too.");
+                return;
+            }
 
             harmony.Patch(target, prefix: new HarmonyMethod(typeof(EarlyUiGuards), guardName));
             InstalledCount++;

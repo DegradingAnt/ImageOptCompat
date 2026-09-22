@@ -14,5 +14,6 @@
     <Compile Include="../ImageOptCompat/Report.cs" Link="Actual/Report.cs" />
     <Compile Include="../ImageOptCompat/ReportLevel.cs" Link="Actual/ReportLevel.cs" />
     <Compile Include="../ImageOptCompat/ReportKind.cs" Link="Actual/ReportKind.cs" />
+    <Compile Include="../ImageOptCompat/StartupCheck.cs" Link="Actual/StartupCheck.cs" />
   </ItemGroup>
 </Project>

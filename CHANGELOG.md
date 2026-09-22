@@ -23,6 +23,12 @@ of about two hours. See "Measured results" in the README.
 - **Main-menu status line.** Like the Harmony mod's version line, a faded line in the main-menu
   corner says whether the mod found problems. Hover over it for details. Problems found while
   loading are shown once, together, in one dialog.
+- **Startup check.** While the game loads, the mod checks that every enabled fix is actually in
+  place, and that Harmony-patched methods resolve so reports name the right mod. It also checks
+  that the Faster Game Loading build, its settings and the mod versions are the tested ones. The
+  main-menu status line shows the result, for example "all 9 startup checks passed", and hovering
+  over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
+  Progress shows it too.
 - **Failed-audio guard.** A sound the game cannot decode now plays as silence, instead of having its
   length read, which can crash Unity's audio code. It checks both Unity's and RimWorld's own decoder
   state, and covers clip, folder and custom sound grains. Works with or without Image Opt, and has
@@ -66,6 +72,10 @@ of about two hours. See "Measured results" in the README.
   `ContentFinder<T>.Get` can no longer switch it off unnoticed.
 - The "Scan mods" button no longer tells players to turn on a setting that is already on when
   nothing is missing.
+- The early-load guards no longer switch off silently when Vanilla Expanded Framework or
+  Worldbuilder changes the method or field they guard. That is now reported.
+- Reports keep calling RimWorld's own code "RimWorld (core)" even when mods ship copies of the
+  game's assembly. 50 mod folders in the test install do.
 
 ### Release checks
 - 125 unit and contract tests, 52 logic tests, and the 30-check regression runner, which executes

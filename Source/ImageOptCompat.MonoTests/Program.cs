@@ -149,6 +149,13 @@ internal static class Program
         FixtureMod.Loader.LoadIcon();
         Check(MissingTextureReport.BuildReport().Contains("Fixture Mod (fixture.mod) at FixtureMod.Loader.LoadIcon"),
             "a code-driven missing texture is attributed through the real Log.Error detour");
+
+        // The startup check's in-game version of the checks above: it patches a private method,
+        // resolves the frame through Harmony, and must remove its patch again.
+        Check(StartupCheck.HarmonyFramesResolve(h), "startup self-test resolves a patched frame on the game's Harmony");
+        var probeTarget = typeof(StartupCheck).GetMethod("ProbeTarget", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var leftover = Harmony.GetPatchInfo(probeTarget);
+        Check(leftover == null || leftover.Prefixes.Count == 0, "startup self-test removes its own patch");
     }
 
     // A separate process mode demonstrates why the former production design is unsafe.

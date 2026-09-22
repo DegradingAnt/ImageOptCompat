@@ -300,6 +300,19 @@ public sealed class RuntimeLogicTests
         Assert.That(shared, Does.Contain("shared library: 2 mods ship a copy"));
         Assert.That(shared, Does.Not.Contain("Owned").And.Not.Contain("WanderJoinsPlus"));
         Assert.That(ModAttribution.NamesOneMod(shared), Is.False);
+
+        // The same situation for the GAME's assembly: 50 mod folders in the test install ship copies
+        // of Assembly-CSharp.dll. RimWorld's own code must stay "RimWorld (core)", not a shared library.
+        var core = ModAttribution.CoreAssembly;
+        try
+        {
+            ModAttribution.CoreAssembly = typeof(RuntimeLogicTests).Assembly;
+            Assert.That(ModAttribution.Describe(typeof(RuntimeLogicTests)), Is.EqualTo(ModAttribution.CoreLabel));
+        }
+        finally
+        {
+            ModAttribution.CoreAssembly = core;
+        }
     }
 
     private static Texture2D Native()
