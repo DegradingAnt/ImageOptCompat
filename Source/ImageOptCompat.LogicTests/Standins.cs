@@ -33,6 +33,10 @@ namespace UnityEngine {
  public enum TextureWrapMode { Repeat, Clamp }
  public enum RenderTextureFormat { Default }
  public enum RenderTextureReadWrite { Default }
+ // Audio stand-ins for the failed-audio crash guard. A decode-failed clip stays live but Unity
+ // dereferences its absent sample data on clip.length (extern) -> access violation -> hard crash.
+ public enum AudioDataLoadState { Unloaded, Loaded, Loading, Failed }
+ public sealed class AudioClip : Object { public AudioDataLoadState loadState; }
  public readonly record struct Color(float r, float g, float b, float a);
  public readonly record struct Rect(float x, float y, float width, float height);
  public class Texture : Object {}
@@ -125,7 +129,7 @@ namespace Verse {
  }
 }
 namespace ImageOptCompat {
- public sealed class Settings { public bool vehicleReadback=true,recompressCopies=true,genericPixelReadback=true,nullTextureGuard=true,fixDoubleExtensionPaths=true; public bool verbose,destroyOriginalTexture,nullTextureShowPlaceholder,nullTextureDeepDiagnostic,reportMissingTextures; }
+ public sealed class Settings { public bool vehicleReadback=true,recompressCopies=true,genericPixelReadback=true,nullTextureGuard=true,fixDoubleExtensionPaths=true,guardFailedAudioClips=true; public bool verbose,destroyOriginalTexture,nullTextureShowPlaceholder,nullTextureDeepDiagnostic,reportMissingTextures; }
  public static class ImageOptCompatMod { public static Settings Settings=new(); public static bool ImageOptActive=true; }
 }
 namespace ImageOpt { public static class Texture2DPatch { public static HashSet<int> NativeTextures=new(); } }

@@ -64,7 +64,7 @@ Unity numbers monitors from 1, so `1` selects the primary display. Fully exit Ri
 | **Orphan sweep** | Removes Image Opt `.dds.zstd` cache files whose source image has gone, which would otherwise be served as stale textures. It **never** touches plain `.dds` - mods ship those deliberately. |
 | **Double-extension path fix** | Image Opt caches as `name.dds.zstd`. A mod that builds texture paths by scanning its own folder calls `Path.GetFileNameWithoutExtension`, which strips only the **last** extension - yielding `name.dds`, a content path that resolves to nothing. Measured cause of the flood below: **Holograms And Projectors** (`Vesper.HologramsAndProjectors`) → 60 dead paths → 60 null-texture materials → 222,128 warnings. Retries the corrected path, and only ever after a lookup has already failed. |
 | **Missing-texture report** | Opt-in. Records every texture a def asked for that doesn't resolve, with the def and the owning mod, and copies a paste-ready report to the clipboard. Off by default - it patches `ContentFinder`. |
-| **Null-texture guard** | Unity logs `null texture passed to GUI.DrawTexture` once per call with no deduplication - Unity emits it itself, so RimWorld's repeat filter never sees it. Measured at **222,128 lines in one session, 94% of a 236,731-line log**. Drawing and ticking share a thread, so it costs tick rate and shows as stutter above 1× while 1× looks fine. Substitutes a **transparent** 1x1 by default, so the screen stays pixel-identical: a null draws nothing today, and `BadTex` would paint magenta over 222k draws. `BadTex` is available as an opt-in diagnostic. Names the first 8 distinct callers once each, with the owning mod. |
+| **Null-texture guard** | Unity logs `null texture passed to GUI.DrawTexture` once per call with no deduplication - Unity emits it itself, so RimWorld's repeat filter never sees it. Measured at **222,128 lines in one session, 94% of a 236,731-line log**. Drawing and ticking share a thread, so it costs tick rate and shows as stutter above 1× while 1× looks fine. Skips the null repaint draw by default, so the screen stays pixel-identical (a null draws nothing and Unity's warning is suppressed); `BadTex` (magenta) is available as an opt-in diagnostic. Names the first 8 distinct callers once each, with the owning mod. |
 
 Texture fixes and the orphan sweep are disabled when Image Opt is inactive. The early-UI guards and the null-texture guard remain active: neither problem is Image Opt's doing, and both cost frame time regardless.
 
@@ -119,6 +119,12 @@ dotnet build Source/ImageOptCompat/ImageOptCompat.csproj -c Release -t:PackageRe
 References come from NuGet (`Krafs.Rimworld.Ref`, `Lib.Harmony`), so a local RimWorld install isn't needed to build.
 Run these commands from the repository root. Builds use separate bin/Debug and bin/Release directories. Only the explicit PackageRelease target copies a DLL into Assemblies; Debug packaging is rejected, and ordinary tests cannot overwrite the packaged DLL.
 Analysers are on (`AnalysisMode=All` plus Meziantou.Analyzer) and the build is expected to be warning-free.
+
+## Validation
+
+Each release is built in Release mode and checked with the two test projects above. The tests cover
+the patch decisions, settings, path handling, installed-mod contracts and the Unity API names used by
+the Harmony patches. The parts that need live Unity objects still need an in-game check.
 
 ## Credits
 

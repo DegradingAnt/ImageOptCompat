@@ -37,7 +37,9 @@ public sealed class RuntimeLogicTests
         Clear(typeof(NullTextureGuard), "ReportedSites");
         Clear(typeof(NullTextureGuard), "Tally");
         typeof(NullTextureGuard).GetField("sampleAttempts", Statics)?.SetValue(null, 0);
+        typeof(NullTextureGuard).GetField("floodSummarized", Statics)?.SetValue(null, false);
         NullTextureGuard.Substituted = 0;
+        typeof(FailedAudioClipGuard).GetField("Suppressed", Statics)?.SetValue(null, 0);
         Event.current = new() { type = EventType.Repaint };
         BaseContent.BadTex = new();
         LoadedModManager.RunningMods.Clear();
@@ -177,6 +179,24 @@ public sealed class RuntimeLogicTests
     }
 
     [Test]
+    public void FloodHintSummarizesOnceWhenManyNullDraws()
+    {
+        ImageOptCompatMod.Settings.nullTextureGuard = true;
+        for (int i = 0; i < NullTextureGuard.FloodHintThreshold + 10; i++) { Texture? texture = null; Draw(ref texture); }
+        var summarized = (bool)typeof(NullTextureGuard).GetField("floodSummarized", Statics)!.GetValue(null)!;
+        Assert.That(summarized, Is.True);
+    }
+
+    [Test]
+    public void FloodHintStaysUnsetBelowThreshold()
+    {
+        ImageOptCompatMod.Settings.nullTextureGuard = true;
+        for (int i = 0; i < NullTextureGuard.FloodHintThreshold - 1; i++) { Texture? texture = null; Draw(ref texture); }
+        var summarized = (bool)typeof(NullTextureGuard).GetField("floodSummarized", Statics)!.GetValue(null)!;
+        Assert.That(summarized, Is.False);
+    }
+
+    [Test]
     public void DeepDiagnosticCountsEveryDrawButLogsOnlyOnce()
     {
         ImageOptCompatMod.Settings.nullTextureDeepDiagnostic = true;
@@ -229,6 +249,19 @@ public sealed class RuntimeLogicTests
         Texture2DReadPatches.ClearCopies();
         Assert.That(next.destroyed, Is.True);
         Assert.That(source.destroyed, Is.False);
+    }
+
+    [Test]
+    public void ServedCounterResetsOnContentTeardown()
+    {
+        // The readback counter must zero when cached copies are released on content teardown,
+        // so the settings readout never describes copies from a previous content set.
+        var source = Native();
+        var copy = Texture2DReadPatches.Readable(source)!;
+        Assert.That(Texture2DReadPatches.Served, Is.GreaterThan(0));
+        Texture2DReadPatches.ClearCopies();
+        Assert.That(Texture2DReadPatches.Served, Is.Zero);
+        Assert.That(source.destroyed, Is.False);   // the original native is never freed by default
     }
 
     [TestCase("Blit"), TestCase("ReadPixels"), TestCase("Apply"), TestCase("Compress"), TestCase("Property")]
@@ -307,5 +340,50 @@ public sealed class RuntimeLogicTests
         OrphanSweep.Run(force: true);
         Assert.That(File.Exists(Path.Combine(textures, "inactive.dds.zstd")), Is.True);
         Assert.That(OrphanSweep.LastDeleted, Is.Zero);
+    }
+
+    // ---- failed-audio crash guard behaviour ---------------------------------------------
+    // A decode-failed clip stays live (passes Verse's `audioClip != null` guard) but reading its
+    // extern clip.length dereferences absent sample data -> access violation -> hard crash. The
+    // guard reports it missing so the game handles it on the path it already has. Only Failed is
+    // touched; Unloaded/Loading are normal for a clip that streams.
+
+    private static void GuardInvoke(string path, AudioClip clip) =>
+        typeof(FailedAudioClipGuard).GetMethod("Postfix", Statics)!.Invoke(null, new object?[] { path, clip });
+
+    private static int SuppressedCount() =>
+        (int)typeof(FailedAudioClipGuard).GetField("Suppressed", Statics)!.GetValue(null)!;
+
+    [Test]
+    public void FailedClipIsReportedMissing()
+    {
+        ImageOptCompatMod.Settings.guardFailedAudioClips = true;
+        GuardInvoke("Sound/Broken", new AudioClip { loadState = AudioDataLoadState.Failed });
+        Assert.That(SuppressedCount(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void UnloadedAndLoadingClipsAreKept()
+    {
+        ImageOptCompatMod.Settings.guardFailedAudioClips = true;
+        foreach (var state in new[] { AudioDataLoadState.Unloaded, AudioDataLoadState.Loading })
+        {
+            GuardInvoke("Sound/Good", new AudioClip { loadState = state });
+            Assert.That(SuppressedCount(), Is.Zero);
+        }
+    }
+
+    [Test]
+    public void FailedClipGuardIsToggleable()
+    {
+        ImageOptCompatMod.Settings.guardFailedAudioClips = false;
+        GuardInvoke("Sound/Broken", new AudioClip { loadState = AudioDataLoadState.Failed });
+        Assert.That(SuppressedCount(), Is.Zero);
+    }
+
+    [Test]
+    public void DescribeCallerReturnsANonEmptyOwner()
+    {
+        Assert.That(ModAttribution.DescribeCaller(), Is.Not.Empty);
     }
 }

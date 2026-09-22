@@ -54,6 +54,16 @@ internal static class NullTextureGuard
     private const int MaxReportedSites = 8;
     private static int sampleAttempts;
 
+    /// A session is silently flooded with null draws before anyone opens the settings page, so once
+    /// enough are intercepted we log a one-line hint pointing at the report and placeholder options.
+    internal const int FloodHintThreshold = 50;
+    private static bool floodSummarized;
+
+    /// True once enough null draws have been intercepted to warrant a single summary hint.
+    /// threshold > 0 keeps a zero threshold from logging on every draw.
+    internal static bool ShouldSummarizeFlood(int substituted, int threshold) =>
+        threshold > 0 && substituted >= threshold;
+
     // Bound ATTEMPTS, not distinct callers. One repeating caller must not trigger a stack walk
     // forever just because the distinct-site count never reaches eight.
     internal static bool ShouldSample(bool deepDiagnostic, ref int attempts)
@@ -188,6 +198,18 @@ internal static class NullTextureGuard
             image = replacement;
         }
         Substituted++;
+
+        // One hint per session, once a flood is under way, so the fix's existence is discoverable
+        // without opening the settings page. Log.Message (not Warning) so it reads as an
+        // informational note rather than another symptom, and does not muddy the warning-counting
+        // sampling tests.
+        if (!floodSummarized && ShouldSummarizeFlood(Substituted, FloodHintThreshold))
+        {
+            floodSummarized = true;
+            Log.Message("[ImageOptCompat] null-texture guard: " + Substituted + " null draw(s) intercepted so far. "
+                      + "Open the settings page for the 'Copy diagnostic report' button, or turn on "
+                      + "'Show a placeholder' to see which elements are missing their texture.");
+        }
 
         // Normal mode walks the stack at most MaxReportedSites times, then the null path costs
         // only a comparison and two increments. Deep-diagnostic mode walks EVERY time to build an

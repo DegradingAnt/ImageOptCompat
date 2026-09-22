@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -28,9 +31,14 @@ public static class OrphanSweep
     /// compressor enumerates, so LoadFolders.xml redirection is honoured rather than guessed at.
     private static List<string> ResolvedTextureDirs()
     {
-        var roots = new List<string>();
+        // Deduplicated, and nested roots dropped. Two mods can resolve to the same folder, and a
+        // LoadFolders redirect can put one mod's texture folder INSIDE another's. SweepDir uses
+        // SearchOption.AllDirectories, so a parent root already covers every child root: keeping
+        // both scanned the same tree twice, over-reported the scanned count, and attempted the
+        // same delete twice, which logged a spurious "could not delete" for the second attempt.
+        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var mods = LoadedModManager.RunningMods;
-        if (mods == null) return roots;
+        if (mods == null) return new List<string>();
 
         foreach (var mod in mods)
         {
@@ -40,19 +48,25 @@ public static class OrphanSweep
             {
                 if (string.IsNullOrEmpty(folder)) continue;
                 var texDir = Path.Combine(folder, GenFilePaths.TexturesFolder);
-                if (Directory.Exists(texDir)) roots.Add(texDir);
+                if (Directory.Exists(texDir)) unique.Add(Path.GetFullPath(texDir).TrimEnd(Path.DirectorySeparatorChar));
             }
         }
-        return roots;
+
+        return new List<string>(OrphanPaths.Deduplicate(unique, Path.DirectorySeparatorChar));
     }
 
-    private static void SweepDir(string texDir, ref int deleted, ref int scanned)
+    /// Sweeps one resolved texture folder. Runs on a worker thread, so it must not call Verse.Log:
+    /// RimWorld's log appends to a shared list and feeds the debug window, and neither is thread
+    /// safe. Messages are handed back and written by the caller on its own thread instead.
+    private static void SweepDir(string texDir, ref int deleted, ref int scanned, ConcurrentQueue<string> messages)
     {
+        var verbose = ImageOptCompatMod.Settings.verbose;
         string[] files;
+
         try { files = Directory.GetFiles(texDir, "*.dds.zstd", SearchOption.AllDirectories); }
         catch (Exception e)
         {
-            if (ImageOptCompatMod.Settings.verbose) Log.Warning($"[ImageOptCompat] enumerate failed '{texDir}': {e.Message}");
+            if (verbose) messages.Enqueue($"[ImageOptCompat] enumerate failed '{texDir}': {e.Message}");
             return;
         }
 
@@ -64,10 +78,50 @@ public static class OrphanSweep
             {
                 File.Delete(f);
                 deleted++;
-                if (ImageOptCompatMod.Settings.verbose) Log.Message($"[ImageOptCompat] orphan removed: {f}");
+                if (verbose) messages.Enqueue($"[ImageOptCompat] orphan removed: {f}");
             }
-            catch (Exception e) { Log.Warning($"[ImageOptCompat] could not delete '{f}': {e.Message}"); }
+            catch (Exception e) { messages.Enqueue($"[ImageOptCompat] could not delete '{f}': {e.Message}"); }
         }
+    }
+
+    /// Sweeps every root in parallel.
+    ///
+    /// This is pure file work with no Unity or Verse call in the worker, which is the only reason
+    /// it can leave the calling thread. It runs during startup across every active mod's texture
+    /// folders, so on a large list the enumeration dominates and parallelising it is a direct
+    /// saving on load time.
+    ///
+    /// Roots are already deduplicated and de-nested by ResolvedTextureDirs, so no two workers can
+    /// reach the same file and a parallel File.Delete cannot race another worker's delete.
+    private static void SweepAll(List<string> roots, out int deleted, out int scanned)
+    {
+        var totalDeleted = 0;
+        var totalScanned = 0;
+        var messages = new ConcurrentQueue<string>();
+        var degree = Math.Max(1, Math.Min(Environment.ProcessorCount - 1, 8));
+
+        try
+        {
+            Parallel.ForEach(roots, new ParallelOptions { MaxDegreeOfParallelism = degree }, root =>
+            {
+                var d = 0;
+                var s = 0;
+                SweepDir(root, ref d, ref s, messages);
+                Interlocked.Add(ref totalDeleted, d);
+                Interlocked.Add(ref totalScanned, s);
+            });
+        }
+        catch (AggregateException e)
+        {
+            messages.Enqueue($"[ImageOptCompat] the sweep hit {e.InnerExceptions.Count} error(s); "
+                           + "some folders may not have been swept.");
+        }
+
+        // Back on the calling thread, where Verse.Log is safe again.
+        while (messages.TryDequeue(out var line)) Log.Warning(line);
+
+        deleted = totalDeleted;
+        scanned = totalScanned;
     }
 
     public static void Run(bool force = false)
@@ -108,7 +162,7 @@ public static class OrphanSweep
         var deleted = 0;
         var scanned = 0;
 
-        foreach (var texDir in roots) SweepDir(texDir, ref deleted, ref scanned);
+        SweepAll(roots, out deleted, out scanned);
 
         LastDeleted = deleted;
         LastScanned = scanned;

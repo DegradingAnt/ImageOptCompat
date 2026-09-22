@@ -59,12 +59,23 @@ public class MissingTextureReportTests
     [TestCase("World/WorldObjects/Expanding/Settlement")]
     public void LeavesOrdinaryContentPathsAlone(string path) => Refuses(path);
 
-    /// Other extensions are none of this rule's business.
+    /// Other extensions are none of this rule's business. (Widget.dds.zstd is now corrected - see
+    /// CorrectsAFullCachePath below - so only a single .zstd, .png or .jpg is refused here.)
     [TestCase("Things/Item/Widget.png")]
     [TestCase("Things/Item/Widget.zstd")]
-    [TestCase("Things/Item/Widget.dds.zstd")]
     [TestCase("Things/Item/Widget.jpg")]
     public void LeavesOtherExtensionsAlone(string path) => Refuses(path);
+
+    /// A mod that used the cache file's whole name (not stripped one extension) builds
+    /// "name.dds.zstd". The ".dds" rule alone misses it; the full-artefact rule corrects it in one
+    /// pass, and the result is itself correctable no further.
+    [Test]
+    public void CorrectsAFullCachePath() =>
+        Assert.That(Correct("Things/Item/Widget.dds.zstd"), Is.EqualTo("Things/Item/Widget"));
+
+    [Test]
+    public void CorrectingTheFullPathLeavesNoFurtherArtefact() =>
+        Assert.That(MissingTextureReport.TryCorrectPath("Things/Item/Widget", out _), Is.False);
 
     /// Must be a SUFFIX match, never a substring one.
     [TestCase("Things/Item/Widget.ddsx")]

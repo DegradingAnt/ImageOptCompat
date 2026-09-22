@@ -45,6 +45,12 @@ public sealed class ImageOptCompatMod : Mod
         if ((ImageOptActive && Settings.fixDoubleExtensionPaths) || Settings.reportMissingTextures)
             MissingTextureReport.TryInstall(harmony);
 
+        // Unconditional, like the guards above, and nothing to do with Image Opt: a sound file the
+        // engine cannot decode crashes the game in native audio code, and Faster Game Loading's
+        // deferred sound pass is where that gets reached. A catch block cannot catch it.
+        if (Settings.guardFailedAudioClips) FailedAudioClipGuard.TryInstall(harmony);
+
+
         if (!ImageOptActive)
         {
             Log.Message("[ImageOptCompat] Image Opt is not active - Image Opt features stay off; "
@@ -101,26 +107,32 @@ public sealed class ImageOptCompatMod : Mod
     /// renamed field in a newer version makes a feature silently no-op; this is the early signal.
     /// modVersion from About.xml, NOT the assembly version: both authors leave that at a placeholder
     /// (ImageOpt.dll 0.0.0.0, FasterGameLoading.dll 1.0.0.0), so it identifies nothing.
-    private const string TestedImageOpt = "0.1.13";
-    private const string TestedFgl = "2026.09.07.1";
-
     public static string? UntestedVersions { get; private set; }
 
     private static void CheckVersions()
     {
-        var notes = new List<string>();
-        Compare("dev.soeur.imageopt", "Image Opt", TestedImageOpt, notes);
-        Compare("Taranchuk.FasterGameLoading", "Faster Game Loading", TestedFgl, notes);
+        // Resolve the three required mods' versions from the running game, tolerating a mod that
+        // is absent or whose version ModLister cannot read. The pure comparison lives in VersionCheck
+        // (Verse-free) so it is unit-tested without the game or Assembly-CSharp.
+        var installed = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dev.soeur.imageopt"] = VersionOf("dev.soeur.imageopt"),
+            ["Taranchuk.FasterGameLoading"] = VersionOf("Taranchuk.FasterGameLoading"),
+            ["brrainz.harmony"] = VersionOf("brrainz.harmony"),
+        };
+
+        var notes = VersionCheck.BuildUntestedNotes(installed);
         UntestedVersions = notes.Count == 0 ? null : string.Join("; ", notes);
+        foreach (var note in notes)
+            Log.Warning($"[ImageOptCompat] {note}; it may still work, but an untested version can "
+          + "silently disable parts of this patch.");
     }
 
-    private static void Compare(string packageId, string label, string tested, List<string> notes)
+    /// Reads a mod's version through ModLister, returning null if it is absent or unreadable.
+    private static string? VersionOf(string packageId)
     {
-        var version = ModLister.GetActiveModWithIdentifier(packageId, ignorePostfix: true)?.ModVersion;
-        if (string.IsNullOrEmpty(version) || string.Equals(version, tested, StringComparison.Ordinal)) return;
-        notes.Add($"{label} {version} (tested {tested})");
-        Log.Warning($"[ImageOptCompat] {label} is version {version}; this patch was tested with {tested}. "
-                  + "It may still work, but an untested version can silently disable parts of this patch.");
+        try { return ModLister.GetActiveModWithIdentifier(packageId, ignorePostfix: true)?.ModVersion; }
+        catch { return null; }
     }
 
     public override string SettingsCategory() => "ImageOptCompat";
@@ -236,6 +248,14 @@ public sealed class ImageOptCompatMod : Mod
 
     private static void DrawSweepAndLoggingToggles(Listing_Standard l)
     {
+        l.CheckboxLabeled("Failed-audio crash guard", ref Settings.guardFailedAudioClips,
+            "A sound file the engine cannot decode crashes the game outright, in native audio code, where "
+          + "no error handler can catch it. Faster Game Loading's deferred sound pass is where that gets "
+          + "reached. This reports such a file as missing so the game handles it the way it already handles "
+          + "a missing sound. Only files the engine has already marked as failed are touched, so nothing "
+          + "that plays today stops playing. Requires a restart.");
+        l.Gap();
+
         l.CheckboxLabeled("Sweep orphaned .dds.zstd", ref Settings.sweepOrphanZstd,
             "Delete Image Opt .dds.zstd files whose source image no longer exists. These are served as "
           + "stale textures otherwise. Plain .dds is never touched - mods legitimately ship those.");
@@ -266,6 +286,39 @@ public sealed class ImageOptCompatMod : Mod
           + "the first few, to build an exact per-mod count. Turn it on only while hunting a fault.");
     }
 
+    /// Feedback that works on the MAIN MENU, not only in a loaded game.
+    ///
+    /// Every diagnostic on this page is meant to be usable before a save is opened, while sorting
+    /// the mod list out. Messages.Message depends on the in-game message drawer, so it is the one
+    /// call here that could throw that early. The log line is written first and unconditionally,
+    /// so the result survives even when the on-screen toast cannot be shown.
+    private static void Notify(string message)
+    {
+        Log.Message("[ImageOptCompat] " + message);
+
+        try
+        {
+            Messages.Message("[ImageOptCompat] " + message, MessageTypeDefOf.TaskCompletion, historical: false);
+        }
+        catch (Exception)
+        {
+            // No message drawer yet. The log line above already carried the result.
+        }
+    }
+
+    /// A crash guard that found nothing and one that never installed read identically, so the
+    /// status always says which of the two it is.
+    private static string AudioGuardStatus()
+    {
+        if (!FailedAudioClipGuard.Installed)
+            return "Failed-audio guard: NOT installed - an undecodable sound file can still crash the game.";
+
+        return FailedAudioClipGuard.Suppressed == 0
+            ? "Failed-audio guard: active, no undecodable sound files seen."
+            : $"Failed-audio guard: active, {FailedAudioClipGuard.Suppressed} interception(s) - "
+            + "see the copied report for which files.";
+    }
+
     /// Split out so DoSettingsWindowContents stays readable; these are read-outs, not controls.
     private static void DrawSessionCounters(Listing_Standard l)
     {
@@ -273,6 +326,7 @@ public sealed class ImageOptCompatMod : Mod
         l.Gap(6f);
 
         l.Label($"Vehicle textures replaced: {VehicleReadback.Replaced}");
+        l.Label($"Image Opt pixel reads served from CPU copies: {Texture2DReadPatches.Served}");
         l.Label($"Early-UI guards: {EarlyUiGuards.InstalledCount} installed, "
               + $"{EarlyUiGuards.VefSkips} VEF + {EarlyUiGuards.WorldbuilderSkips} Worldbuilder skips.");
         l.Label(NullTextureGuard.InstalledCount == 0
@@ -283,6 +337,8 @@ public sealed class ImageOptCompatMod : Mod
         l.Label(MissingTextureReport.Installed && Settings.reportMissingTextures
             ? $"Missing textures recorded: {MissingTextureReport.DistinctPaths} distinct path(s)."
             : "Missing-texture reporting is off, so nothing is being recorded.");
+
+        l.Label(AudioGuardStatus());
         if (l.ButtonText("Sweep now")) OrphanSweep.Run(force: true);
         l.Gap();
 
@@ -292,10 +348,31 @@ public sealed class ImageOptCompatMod : Mod
         {
             var report = NullTextureGuard.BuildReport()
                        + Environment.NewLine
-                       + MissingTextureReport.BuildReport();
+                       + MissingTextureReport.BuildReport()
+                       + Environment.NewLine
+                       + FailedAudioClipGuard.ReportLine();
             GUIUtility.systemCopyBuffer = report;
-            Messages.Message("[ImageOptCompat] diagnostic report copied to the clipboard.",
-                MessageTypeDefOf.TaskCompletion, historical: false);
+            Notify("diagnostic report copied to the clipboard.");
+        }
+
+        l.Gap();
+
+        // Separate button, because unlike the one above this reads every file of every active mod
+        // and freezes the UI for several seconds. Nobody should hit that by accident.
+        var recorded = MissingTextureReport.DistinctPaths;
+        if (l.ButtonText($"Scan mods for the {recorded} recorded missing asset(s) - slow"))
+        {
+            if (recorded == 0)
+            {
+                Notify("nothing recorded yet. Turn on \"Report missing textures\" and restart first.");
+            }
+            else
+            {
+                var scan = AssetRequesterScan.Report(MissingTextureReport.RecordedPaths());
+                GUIUtility.systemCopyBuffer = scan;
+                Log.Message("[ImageOptCompat] asset owner scan:" + Environment.NewLine + scan);
+                Notify("scan copied to the clipboard and written to the log.");
+            }
         }
     }
 }

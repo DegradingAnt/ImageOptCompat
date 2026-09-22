@@ -79,6 +79,68 @@ internal static class ModAttribution
         }
     }
 
+    /// Frames that are never the answer when looking for "which mod asked for this".
+    /// Verse.ContentFinder is the method being patched, so it is always on the stack.
+    private static readonly string[] NeverTheCaller =
+    {
+        "Verse.ContentFinder", "Verse.ModContentLoader", "Verse.ModContentHolder",
+    };
+
+    /// Names the mod behind a lookup that no def triggered.
+    ///
+    /// RimWorld sets ContentFinderRequester.requester only while it resolves a def's references.
+    /// Code that calls ContentFinder directly leaves it null, and the game's own error line then
+    /// says nothing about who asked. Measured: 2,625 such lookups in one session, all for SongDef
+    /// clip paths being requested as textures, with no way to tell which mod wanted them.
+    ///
+    /// Walks to the first frame that belongs to a real mod. Falls back to the first non-plumbing
+    /// frame, so the answer is "RimWorld (core)" rather than silence when the game itself asked.
+    /// Only called on a failed lookup, and only while recording is switched on.
+    internal static string DescribeCaller()
+    {
+        try
+        {
+            var trace = new System.Diagnostics.StackTrace(fNeedFileInfo: false);
+            string? firstNonPlumbing = null;
+
+            for (var i = 0; i < trace.FrameCount; i++)
+            {
+                var method = trace.GetFrame(i)?.GetMethod();
+                var type = method?.DeclaringType;
+                if (type == null) continue;
+
+                var full = type.FullName ?? string.Empty;
+                if (NullTextureGuard.IsPlumbingFrame(full)) continue;
+                if (StartsWithAny(full, NeverTheCaller)) continue;
+
+                var owner = Describe(type);
+                firstNonPlumbing ??= $"{owner} at {full}.{method!.Name}";
+
+                // A real mod owns this frame, which is the answer we actually want.
+                if (!owner.Equals("RimWorld (core)", StringComparison.Ordinal)
+                 && !owner.Equals("unknown mod", StringComparison.Ordinal)
+                 && !owner.EndsWith("(not a loaded mod assembly)", StringComparison.Ordinal))
+                    return $"{owner} at {full}.{method!.Name}";
+            }
+
+            return firstNonPlumbing ?? "unknown caller";
+        }
+        catch (Exception)
+        {
+            return "unknown caller";
+        }
+    }
+
+    private static bool StartsWithAny(string value, string[] prefixes)
+    {
+        foreach (var prefix in prefixes)
+        {
+            if (value.StartsWith(prefix, StringComparison.Ordinal)) return true;
+        }
+
+        return false;
+    }
+
     /// Lets a test or a reload start from scratch.
     internal static void Reset() => byAssembly = null;
 }

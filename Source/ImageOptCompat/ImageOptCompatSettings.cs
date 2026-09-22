@@ -18,6 +18,10 @@ public sealed class ImageOptCompatSettings : ModSettings
     // OFF by default: recording every failed lookup is a diagnostic to switch on while hunting a
     // fault, not a permanent passenger.
     public bool reportMissingTextures;
+
+    // ON by default: this prevents a hard crash, and it only acts on a clip Unity has already
+    // reported as failed to decode. Nothing that plays today stops playing.
+    public bool guardFailedAudioClips = true;
     public bool recompressCopies = true;
     public bool destroyOriginalTexture;
     public bool verbose;
@@ -33,6 +37,7 @@ public sealed class ImageOptCompatSettings : ModSettings
         Scribe_Values.Look(ref nullTextureDeepDiagnostic, "nullTextureDeepDiagnostic", false);
         Scribe_Values.Look(ref fixDoubleExtensionPaths, "fixDoubleExtensionPaths", true);
         Scribe_Values.Look(ref reportMissingTextures, "reportMissingTextures", false);
+        Scribe_Values.Look(ref guardFailedAudioClips, "guardFailedAudioClips", true);
         Scribe_Values.Look(ref recompressCopies, "recompressCopies", true);
         Scribe_Values.Look(ref destroyOriginalTexture, "destroyOriginalTexture", false);
         Scribe_Values.Look(ref verbose, "verbose", false);

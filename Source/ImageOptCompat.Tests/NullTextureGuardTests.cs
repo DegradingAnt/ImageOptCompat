@@ -130,4 +130,25 @@ public class NullTextureGuardTests
     [Test]
     public void ASimilarlyNamedModNamespaceIsNotSkipped() =>
         Assert.That(NullTextureGuard.IsPlumbingFrame("UnityEngineExtras.Draw"), Is.False);
+
+    // ---- the one-per-session flood hint -----------------------------------------------
+
+    /// The hint fires once a flood is under way, so a fix that runs silently is discoverable
+    /// without opening the settings page. The pure rule is what is tested here; the integration
+    /// (logged exactly once) is in RuntimeLogicTests.
+    [Test]
+    public void FloodHintFiresOncePastThreshold()
+    {
+        Assert.That(NullTextureGuard.ShouldSummarizeFlood(49, NullTextureGuard.FloodHintThreshold), Is.False);
+        Assert.That(NullTextureGuard.ShouldSummarizeFlood(50, NullTextureGuard.FloodHintThreshold), Is.True);
+        Assert.That(NullTextureGuard.ShouldSummarizeFlood(999, NullTextureGuard.FloodHintThreshold), Is.True);
+    }
+
+    [Test]
+    public void FloodHintNeverFiresWithZeroThreshold() =>
+        Assert.That(NullTextureGuard.ShouldSummarizeFlood(1000, 0), Is.False);
+
+    [Test]
+    public void FloodHintThresholdIsPositiveAndFinite() =>
+        Assert.That(NullTextureGuard.FloodHintThreshold, Is.GreaterThan(0));
 }

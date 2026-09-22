@@ -46,6 +46,10 @@ internal static class MissingTextureReport
     private const int MaxPaths = 256;
 
     internal static int DistinctPaths => Missing.Count;
+
+    /// The recorded paths, for AssetRequesterScan to trace back to an owning mod. Copied rather
+    /// than exposed live, because the scan takes seconds and the dictionary keeps being written.
+    internal static List<string> RecordedPaths() => new(Missing.Keys);
     internal static bool Installed { get; private set; }
 
     internal static void TryInstall(Harmony harmony)
@@ -115,9 +119,15 @@ internal static class MissingTextureReport
                 Path = itemPath,
                 Count = 1,
                 Def = def?.defName ?? "(no def - requested directly by code)",
-                Mod = def?.modContentPack == null
-                    ? ModAttribution.Describe(def?.GetType())
-                    : $"{def.modContentPack.Name} ({def.modContentPack.PackageId})",
+
+                // With no def there is nothing to attribute to, so read the stack instead.
+                // Without this, every code-driven lookup reported "unknown mod", which is the
+                // majority of them: 2,625 in the measured session.
+                Mod = def == null
+                    ? ModAttribution.DescribeCaller()
+                    : def.modContentPack == null
+                        ? ModAttribution.Describe(def.GetType())
+                        : $"{def.modContentPack.Name} ({def.modContentPack.PackageId})",
             };
         }
         catch (Exception)
@@ -144,25 +154,42 @@ internal static class MissingTextureReport
     ///    "does this optional texture exist?" test that we would be falsifying;
     ///  - a retry guard prevents re-entry, even for names ending in multiple .dds suffixes.
     /// The Image Opt cache extension, as it appears AFTER a mod has stripped ".zstd" off
-    /// "name.dds.zstd". This is the only suffix corrected, deliberately.
+    /// "name.dds.zstd", OR kept the whole "name.dds.zstd" name. Both are corrected on purpose; the
+    /// rule is narrow in the other direction (only these artefact suffixes, never a content path).
+    /// The Image Opt cache artefact left after a single `Path.GetFileNameWithoutExtension` strips
+    /// ".zstd": "name.dds.zstd" -> "name.dds". A mod that scans its own folder and strips one
+    /// extension hands the game "name.dds", which is not a content path and resolves to nothing.
     private const string Artefact = ".dds";
+
+    /// The full cache artefact, when a mod used the cache file's whole name instead of stripping one
+    /// extension: "name.dds.zstd". Handled first (longer match) so a path built from the full cache
+    /// file is corrected too, without changing the single-strip ".dds" case above.
+    private const string ArtefactFull = ".dds.zstd";
 
     /// The decision, split out with no Verse or Unity dependency so it can be tested directly -
     /// the same shape as OrphanPaths and VehicleReadback.NeedsCpuReadback.
     ///
-    /// Correct ONLY when the path ends in the artefact extension. A genuine RimWorld content path
-    /// normally omits the file extension. A filename stem can itself contain dots; the caller
+    /// Correct ONLY when the path ends in an Image Opt artefact extension. A genuine RimWorld content
+    /// path normally omits the file extension. A filename stem can itself contain dots; the caller
     /// retries only once, so a missing name.dds.dds cannot incorrectly resolve all the way to name.
     internal static bool TryCorrectPath(string? itemPath, out string corrected)
     {
         corrected = string.Empty;
 
         if (string.IsNullOrEmpty(itemPath)) return false;
-        if (!itemPath!.EndsWith(Artefact, StringComparison.OrdinalIgnoreCase)) return false;
 
-        var candidate = itemPath.Substring(0, itemPath.Length - Artefact.Length);
+        // Match the longer artefact first so "name.dds.zstd" is corrected to "name" in one pass and
+        // cannot be left ending in ".zstd" (which the ".dds" rule below would not touch).
+        var artefact = ArtefactFull;
+        if (!itemPath!.EndsWith(artefact, StringComparison.OrdinalIgnoreCase))
+        {
+            artefact = Artefact;
+            if (!itemPath.EndsWith(artefact, StringComparison.OrdinalIgnoreCase)) return false;
+        }
 
-        // ".dds" on its own leaves nothing to look up.
+        var candidate = itemPath.Substring(0, itemPath.Length - artefact.Length);
+
+        // A bare artefact (".dds", ".dds.zstd") leaves nothing to look up.
         if (candidate.Length == 0) return false;
 
         corrected = candidate;
@@ -189,11 +216,21 @@ internal static class MissingTextureReport
             result = found!;
             Rescued++;
 
+            // Explain the mechanism ONCE. The measured session repaired 60 paths, and repeating
+            // a 300-character explanation per path put 18 KB of our own noise into a log we are
+            // trying to make readable. The full list is in the diagnostic report instead.
             if (RescuedPaths.Count < MaxPaths && RescuedPaths.Add(itemPath))
-                Log.Message($"[ImageOptCompat] '{itemPath}' does not exist, but '{corrected}' does - serving that "
-                          + "instead. The mod built this path by scanning its texture folder and stripping one "
-                          + "extension, which turns Image Opt's 'name.dds.zstd' cache file into 'name.dds'. "
-                          + "Without this the texture is null and Unity logs a warning on every frame it is drawn.");
+            {
+                if (RescuedPaths.Count == 1)
+                    Log.Message($"[ImageOptCompat] repaired a texture path: '{itemPath}' does not exist, but "
+                              + $"'{corrected}' does. A mod built this path by scanning its texture folder and "
+                              + "stripping one extension, which turns Image Opt's 'name.dds.zstd' cache file into "
+                              + "'name.dds'. Left alone, the texture is null and Unity logs a warning on every "
+                              + "frame it is drawn. Further repairs this session are counted, not logged: see "
+                              + "the mod settings page for the total and the full list.");
+                else if (ImageOptCompatMod.Settings.verbose)
+                    Log.Message($"[ImageOptCompat] repaired texture path '{itemPath}' -> '{corrected}'.");
+            }
 
             return true;
         }
