@@ -28,7 +28,7 @@ of about two hours. See "Measured results" in the README.
   that the Faster Game Loading build, its settings and the mod versions are the tested ones. The
   main-menu status line shows the result, for example "all 9 startup checks passed", and hovering
   over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
-  Progress shows it too.
+  Progress shows it too. The same list opens the diagnostic report and heads the settings page.
 - **Repeated-error finder.** When the same error keeps repeating, the mod names the mod whose code
   throws it. That is a notice in the log after 100 repeats, and once on screen after 1,000. It reads
   the error itself, so it works even when the log only says "Duplicate stacktrace". The test pack
@@ -65,6 +65,7 @@ of about two hours. See "Measured results" in the README.
 - Texture repair now hooks the game's non-generic resource fallback. The missing-texture report
   watches the game's final error lines and never suppresses them.
 - The orphan sweep checks texture folders in parallel.
+- The "Sweep now" button says what it did.
 - All log output goes through one place and follows the report level. A problem that can break
   loading is now logged as an error, as the Harmony mod does; other problems remain warnings.
 

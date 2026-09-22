@@ -35,7 +35,9 @@ internal static class Texture2DReadPatches
     // when a weak source key is collected; never take ownership of Image Opt's sources.
     private static readonly HashSet<Texture2D> OwnedCopies = new();
 
-    internal static int Served { get; private set; }
+    /// long, not int: a mod calling GetPixel per pixel adds millions per texture, and an int wrapped
+    /// negative within a long session.
+    internal static long Served { get; private set; }
 
     /// Whether Image Opt's texture record was found, for the startup check. Resolving it early is
     /// harmless: the lookup is the same one the first read would make.

@@ -91,7 +91,18 @@ internal static class FailedAudioClipGuard
         // on failure, never for ordinary Loading/Unloaded clips, and reused for the session.
         // Use a second, not one PCM frame: SubSustainer repeats short clips as often as 100 Hz.
         if (silentClip == null)
-            silentClip = AudioClip.Create(ModInfo.Name + " - silence for a failed sound", 44100, 1, 44100, false);
+        {
+            // AudioClip.Create is main-thread only. If a failed clip is ever resolved elsewhere, the
+            // guard must not throw and leave the constructor to read the failed clip's length
+            // natively: handing it null instead turns a native crash into a managed exception.
+            try { silentClip = AudioClip.Create(ModInfo.Name + " - silence for a failed sound", 44100, 1, 44100, false); }
+            catch (Exception)
+            {
+                clip = null!;
+                return;
+            }
+        }
+
         clip = silentClip!;
     }
 

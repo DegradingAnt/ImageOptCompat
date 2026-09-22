@@ -169,6 +169,8 @@ public sealed class ImageOptCompatMod : Mod
             l.Label($"Untested versions: {UntestedVersions}");
         if (FglUntestedSettings != null)
             l.Label($"Faster Game Loading settings differ from the tested defaults: {FglUntestedSettings}");
+        var checks = l.Label($"Startup checks: {StartupCheck.Summary()} (hover for the list).");
+        TooltipHandler.TipRegion(checks, string.Join(Environment.NewLine, StartupCheck.Results));
         l.GapLine();
         DrawFixToggles(l);
 
@@ -385,21 +387,18 @@ public sealed class ImageOptCompatMod : Mod
             : "Missing-texture reporting is off, so nothing is being recorded.");
 
         l.Label(AudioGuardStatus());
-        if (l.ButtonText("Sweep now")) OrphanSweep.Run(force: true);
+        if (l.ButtonText("Sweep now"))
+        {
+            OrphanSweep.Run(force: true);
+            Notify($"sweep finished: {OrphanSweep.LastDeleted} orphan(s) removed, {OrphanSweep.LastScanned} file(s) scanned.");
+        }
         l.Gap();
 
         // Copied rather than only logged: a report an author can paste into a bug thread is far
         // more use than one buried in a 200,000-line Player.log.
         if (l.ButtonText("Copy diagnostic report to clipboard"))
         {
-            var report = NullTextureGuard.BuildReport()
-                       + Environment.NewLine
-                       + MissingTextureReport.BuildReport()
-                       + Environment.NewLine
-                       + FailedAudioClipGuard.ReportLine()
-                       + Environment.NewLine
-                       + RepeatedErrorFinder.BuildReport();
-            GUIUtility.systemCopyBuffer = report;
+            GUIUtility.systemCopyBuffer = DiagnosticReport();
             Notify("diagnostic report copied to the clipboard.");
         }
 
@@ -423,6 +422,20 @@ public sealed class ImageOptCompatMod : Mod
             }
         }
     }
+
+    /// What a bug thread needs, in the order it needs it: whether everything is in place first,
+    /// then each diagnostic's findings.
+    private static string DiagnosticReport() =>
+        "Startup checks: " + StartupCheck.Summary() + Environment.NewLine
+      + string.Join(Environment.NewLine, StartupCheck.Results) + Environment.NewLine
+      + Environment.NewLine
+      + NullTextureGuard.BuildReport()
+      + Environment.NewLine
+      + MissingTextureReport.BuildReport()
+      + Environment.NewLine
+      + FailedAudioClipGuard.ReportLine()
+      + Environment.NewLine
+      + RepeatedErrorFinder.BuildReport();
 
     private static void DrawSoundAndErrorCounters(Listing_Standard l)
     {

@@ -38,16 +38,32 @@ internal static class StartupCheck
         public override string ToString() => $"{Label(Outcome)}  {Name}: {Detail}";
     }
 
-    /// Everything the rules need, read from the running game in one place.
+    /// Everything the rules need, read from the running game in one place. Properties rather than
+    /// fields, so a test harness that links these rules without the runner that fills them in does
+    /// not see "never assigned" warnings.
     internal sealed class Snapshot
     {
-        internal bool ImageOptActive;
-        internal bool EarlyGuardsOn, NullGuardOn, AudioGuardOn, RepairOn, ReportOn, ReadbackOn, SoundFixOn;
-        internal int EarlyGuardsFound, EarlyGuardsInstalled, NullGuardTargets;
-        internal bool AudioGuardInstalled, TextureHooksInstalled, ImageOptTrackingFound, HarmonyFramesResolve;
-        internal bool SoundFixInstalled, RepeatedFinderOn, RepeatedFinderInstalled;
-        internal bool? FglSupport;
-        internal string? UntestedVersions, FglUntestedSettings;
+        internal bool ImageOptActive { get; set; }
+        internal bool EarlyGuardsOn { get; set; }
+        internal bool NullGuardOn { get; set; }
+        internal bool AudioGuardOn { get; set; }
+        internal bool RepairOn { get; set; }
+        internal bool ReportOn { get; set; }
+        internal bool ReadbackOn { get; set; }
+        internal bool SoundFixOn { get; set; }
+        internal bool RepeatedFinderOn { get; set; }
+        internal int EarlyGuardsFound { get; set; }
+        internal int EarlyGuardsInstalled { get; set; }
+        internal int NullGuardTargets { get; set; }
+        internal bool AudioGuardInstalled { get; set; }
+        internal bool TextureHooksInstalled { get; set; }
+        internal bool ImageOptTrackingFound { get; set; }
+        internal bool HarmonyFramesResolve { get; set; }
+        internal bool SoundFixInstalled { get; set; }
+        internal bool RepeatedFinderInstalled { get; set; }
+        internal bool? FglSupport { get; set; }
+        internal string? UntestedVersions { get; set; }
+        internal string? FglUntestedSettings { get; set; }
     }
 
     /// The results of the last run, for the main-menu line and the settings page.
