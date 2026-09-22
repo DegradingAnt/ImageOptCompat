@@ -67,7 +67,7 @@ internal static class Texture2DReadPatches
         if (ids == null || !ids.Contains(tex.GetInstanceID())) return null;
         if (Copies.TryGetValue(tex, out var cached))
         {
-            if (cached != null) return cached;   // GetPixel is called per-pixel in loops
+            if (cached != null) { Served++; return cached; }   // Include cached per-pixel reads.
             Copies.Remove(tex);
 
             // The two null tests above and below are DELIBERATELY different operators, and the

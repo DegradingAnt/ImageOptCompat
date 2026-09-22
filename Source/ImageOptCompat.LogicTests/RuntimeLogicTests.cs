@@ -31,7 +31,11 @@ public sealed class RuntimeLogicTests
         ImageOpt.Texture2DPatch.NativeTextures.Clear();
         ContentFinder<Texture2D>.Assets.Clear();
         ContentFinder<Texture2D>.Requests.Clear();
-        ContentFinder<Texture2D>.Postprocess = Postfix;
+        ContentFinder<Texture2D>.Bundles.Clear();
+        ResourcesAPI.Assets.Clear();
+        ResourcesAPI.Postprocess = ResourcePostfix;
+        Log.ErrorObserver = text => Call(typeof(MissingTextureReport), "ObserveError", text);
+        RuntimeAudioClipLoader.Manager.States.Clear();
         ContentFinderRequester.requester = null;
         Clear(typeof(MissingTextureReport), "Missing");
         Clear(typeof(NullTextureGuard), "ReportedSites");
@@ -41,6 +45,7 @@ public sealed class RuntimeLogicTests
         NullTextureGuard.Substituted = 0;
         typeof(FailedAudioClipGuard).GetField("Suppressed", Statics)?.SetValue(null, 0);
         Event.current = new() { type = EventType.Repaint };
+        Event.RejectWorkerReads = false;
         BaseContent.BadTex = new();
         LoadedModManager.RunningMods.Clear();
         ModAttribution.Reset();
@@ -48,13 +53,12 @@ public sealed class RuntimeLogicTests
         LongEventHandler.Pending.Clear();
     }
 
-    private static Texture2D? Postfix(string path, bool report, Texture2D? texture)
+    private static UObject? ResourcePostfix(string path, Type type, UObject? texture)
     {
-        var method = typeof(MissingTextureReport).GetMethod("Postfix", Statics)!;
-        // Also supports the old two-argument signature for before/after regression evidence.
-        object?[] args = method.GetParameters().Length == 2 ? [path, texture] : [path, report, texture];
+        var method = typeof(MissingTextureReport).GetMethod("ResourcePostfix", Statics)!;
+        object?[] args = [path, type, texture];
         method.Invoke(null, args);
-        return (Texture2D?)args[^1];
+        return (UObject?)args[^1];
     }
 
     private static bool Draw(ref Texture? texture)
@@ -100,6 +104,40 @@ public sealed class RuntimeLogicTests
     }
 
     [Test]
+    public void OriginalBundleTextureWinsOverCorrectedPath()
+    {
+        var original = new Texture2D();
+        ContentFinder<Texture2D>.Bundles["Hologram.dds"] = original;
+        ContentFinder<Texture2D>.Assets["Hologram"] = new Texture2D();
+        Assert.That(ContentFinder<Texture2D>.Get("Hologram.dds"), Is.SameAs(original));
+    }
+
+    [Test]
+    public void ResourceOnlyRequestDoesNotFallBackToMods()
+    {
+        ContentFinder<Texture2D>.Assets["Hologram"] = new Texture2D();
+        Assert.That(new ResourcesAPI().Load("Textures/Hologram.dds", typeof(Texture2D)), Is.Null);
+    }
+
+    [Test]
+    public void TextureReportPreservesApostropheAtEndOfPath()
+    {
+        ImageOptCompatMod.Settings.reportMissingTextures = true;
+        ContentFinder<Texture2D>.Get("missing'");
+        Assert.That(MissingTextureReport.RecordedPaths(), Does.Contain("missing'"));
+    }
+
+    [Test]
+    public void CachedReadbackCallsAreCounted()
+    {
+        var texture = new Texture2D();
+        ImageOpt.Texture2DPatch.NativeTextures.Add(texture.GetInstanceID());
+        var first = Texture2DReadPatches.Readable(texture);
+        Assert.That(Texture2DReadPatches.Readable(texture), Is.SameAs(first));
+        Assert.That(Texture2DReadPatches.Served, Is.EqualTo(2));
+    }
+
+    [Test]
     public void InactiveImageOptDoesNotRewritePaths()
     {
         ImageOptCompatMod.ImageOptActive = false;
@@ -136,6 +174,15 @@ public sealed class RuntimeLogicTests
         Assert.That(Draw(ref texture), Is.False);
         Assert.That(UObject.NativeAllocations.Count, Is.EqualTo(before));
         Assert.That(texture, Is.Null);
+    }
+
+    [Test]
+    public void WorkerDrawDoesNotReadImGuiState()
+    {
+        UnityData.IsInMainThread = false;
+        Event.RejectWorkerReads = true;
+        Texture? texture = null;
+        Assert.That(Draw(ref texture), Is.True);
     }
 
     [Test]
@@ -342,14 +389,93 @@ public sealed class RuntimeLogicTests
         Assert.That(OrphanSweep.LastDeleted, Is.Zero);
     }
 
+    [Test]
+    public void ResolvedTextureDirsFindsOnlyExistingTextureFolders()
+    {
+        // The parallel folder resolution must still return exactly the folders that exist, and
+        // drop the texture folder of a mod that has none. Order is not asserted: dedup sorts by
+        // length, so a parallel add order is fine.
+        var root = Path.Combine(TestContext.CurrentContext.WorkDirectory, "texdirs", Guid.NewGuid().ToString("N"));
+        var withA = Path.Combine(root, "A", "1.6", "Mods", "Alpha", "Textures");
+        var withoutB = Path.Combine(root, "B", "1.6", "Mods", "Beta");
+        Directory.CreateDirectory(withA);
+        Directory.CreateDirectory(withoutB);
+        LoadedModManager.RunningMods.Add(new() { foldersToLoadDescendingOrder = new() { Path.Combine(root, "A", "1.6", "Mods", "Alpha") } });
+        LoadedModManager.RunningMods.Add(new() { foldersToLoadDescendingOrder = new() { Path.Combine(root, "B", "1.6", "Mods", "Beta") } });
+
+        var dirs = (List<string>?)Call(typeof(OrphanSweep), "ResolvedTextureDirs");
+        Assert.That(dirs, Is.Not.Null);
+        Assert.That(dirs, Has.Count.EqualTo(1));
+        Assert.That(dirs![0], Does.EndWith("Textures"));
+    }
+
+    /// Tests a reentrant insert during conversion. The actual boot failure needs no second
+    /// writer: Mono invalidates Keys enumeration on our own value overwrite. The separate
+    /// MonoTests probe verifies that runtime behavior; this net9 test checks an extra edge case.
+    [Test]
+    public void HolderConversionSurvivesAReentrantInsert()
+    {
+        var holder = new ModContentHolder<Texture2D>();
+        holder.contentList["a"] = new Texture2D();
+        holder.contentList["b"] = new Texture2D();
+
+        var inserted = 0;
+        Graphics.OnBlit = () =>
+        {
+            // One insert only: a second would also fire while draining the snapshot's entries.
+            if (inserted++ == 0) holder.contentList["reentrant_arrival"] = new Texture2D();
+        };
+
+        try
+        {
+            UnityData.IsInMainThread = true;
+            Assert.DoesNotThrow(
+                () => VehicleReadback.ConvertHolder(holder, "smashphil.vehicleframework"),
+                "ConvertHolder must tolerate another mod inserting into contentList mid-conversion. "
+              + "If this throws, the .ToList() snapshot has been removed again - see the comment on "
+              + "that line before 'optimising' it away.");
+        }
+        finally
+        {
+            Graphics.OnBlit = null;
+        }
+
+        // And the late arrival must still be there afterwards: we snapshot the keys, we do not
+        // snapshot and then write back a stale dictionary.
+        Assert.That(holder.contentList.ContainsKey("reentrant_arrival"), Is.True);
+    }
+
+    [Test]
+    public void HolderConversionReplacesEveryNonNullSourceOnce()
+    {
+        // Every non-null source becomes a CPU-readable copy; null entries stay untouched.
+        // This net9 host cannot prove Mono's dictionary iteration rules (see MonoTests).
+        var pack = new ModContentPack();
+        var holder = new ModContentHolder<Texture2D>();
+        var s1 = new Texture2D();
+        var s2 = new Texture2D();
+        holder.contentList["a"] = s1;
+        holder.contentList["b"] = s2;
+        holder.contentList["c"] = null!;
+
+        var before = VehicleReadback.Replaced;
+        UnityData.IsInMainThread = true;
+        VehicleReadback.ConvertHolder(holder, "smashphil.vehicleframework");
+
+        Assert.That(VehicleReadback.Replaced, Is.EqualTo(before + 2));
+        Assert.That(holder.contentList["a"], Is.Not.SameAs(s1));
+        Assert.That(holder.contentList["b"], Is.Not.SameAs(s2));
+        Assert.That(holder.contentList["c"], Is.Null);
+    }
+
     // ---- failed-audio crash guard behaviour ---------------------------------------------
     // A decode-failed clip stays live (passes Verse's `audioClip != null` guard) but reading its
     // extern clip.length dereferences absent sample data -> access violation -> hard crash. The
-    // guard reports it missing so the game handles it on the path it already has. Only Failed is
-    // touched; Unloaded/Loading are normal for a clip that streams.
+    // filter marks failed clips unusable and the constructor guard substitutes shared silence.
+    // Only Failed is touched; Unloaded/Loading are normal for a clip that streams.
 
     private static void GuardInvoke(string path, AudioClip clip) =>
-        typeof(FailedAudioClipGuard).GetMethod("Postfix", Statics)!.Invoke(null, new object?[] { path, clip });
+        typeof(FailedAudioClipGuard).GetMethod("FilterFailed", Statics)!.Invoke(null, new object?[] { path, clip });
 
     private static int SuppressedCount() =>
         (int)typeof(FailedAudioClipGuard).GetField("Suppressed", Statics)!.GetValue(null)!;
@@ -360,6 +486,29 @@ public sealed class RuntimeLogicTests
         ImageOptCompatMod.Settings.guardFailedAudioClips = true;
         GuardInvoke("Sound/Broken", new AudioClip { loadState = AudioDataLoadState.Failed });
         Assert.That(SuppressedCount(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void LoaderFailureIsCaughtEvenWhenUnitySaysLoaded()
+    {
+        var clip = new AudioClip { loadState = AudioDataLoadState.Loaded };
+        RuntimeAudioClipLoader.Manager.States[clip] = AudioDataLoadState.Failed;
+        object?[] args = ["loader-failed", clip];
+        Call(typeof(FailedAudioClipGuard), "FilterFailed", args);
+        Assert.That(args[1], Is.Null);
+    }
+
+    [Test]
+    public void ConstructorGuardReusesAValidSilentClip()
+    {
+        var failed = new AudioClip { loadState = AudioDataLoadState.Failed };
+        object?[] first = [failed];
+        Call(typeof(FailedAudioClipGuard), "Prefix", first);
+        object?[] second = [failed];
+        Call(typeof(FailedAudioClipGuard), "Prefix", second);
+        Assert.That(first[0], Is.Not.Null.And.Not.SameAs(failed));
+        Assert.That(first[0], Is.SameAs(second[0]));
+        Assert.That(((AudioClip)first[0]!).loadState, Is.EqualTo(AudioDataLoadState.Loaded));
     }
 
     [Test]

@@ -18,3 +18,12 @@ install-boot-test.ps1
 .vs/
 .vscode/
 *.user
+
+# private working notes from the overnight local-model pass and later handovers
+AGENT-NOTES.md
+HANDOFF/
+CODEX-HANDOVER-*.md
+# preview-image working files (not part of the mod)
+About/PREVIEW-PROMPT.txt
+About/Preview-v2.png
+About/Preview.previous-*.png

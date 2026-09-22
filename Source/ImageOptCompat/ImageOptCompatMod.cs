@@ -39,9 +39,8 @@ public sealed class ImageOptCompatMod : Mod
         // frame time whether or not Image Opt is loaded.
         if (Settings.nullTextureGuard) NullTextureGuard.TryInstall(harmony);
 
-        // One postfix serves both the double-extension fix and the optional recording, so the
-        // hot path is paid for once. Installed early, because most texture lookups happen during
-        // loading. It returns immediately unless the lookup already failed.
+        // Non-generic resource fallback repairs cache paths; the error observer records final
+        // required failures. Never detour ContentFinder<T>: Mono shares its reference-type code.
         if ((ImageOptActive && Settings.fixDoubleExtensionPaths) || Settings.reportMissingTextures)
             MissingTextureReport.TryInstall(harmony);
 
@@ -251,8 +250,8 @@ public sealed class ImageOptCompatMod : Mod
         l.CheckboxLabeled("Failed-audio crash guard", ref Settings.guardFailedAudioClips,
             "A sound file the engine cannot decode crashes the game outright, in native audio code, where "
           + "no error handler can catch it. Faster Game Loading's deferred sound pass is where that gets "
-          + "reached. This reports such a file as missing so the game handles it the way it already handles "
-          + "a missing sound. Only files the engine has already marked as failed are touched, so nothing "
+          + "reached. This checks both Unity and RimWorld's decoder state before a sound grain reads the "
+          + "clip's length, replacing failed clips with silence. Only clips marked as failed are touched, so nothing "
           + "that plays today stops playing. Requires a restart.");
         l.Gap();
 
@@ -275,7 +274,7 @@ public sealed class ImageOptCompatMod : Mod
         l.Gap(6f);
 
         l.CheckboxLabeled("Report missing textures", ref Settings.reportMissingTextures,
-            "OFF by default. The path repair shares this patch, but recording has its own switch. "
+            "OFF by default. Observes the game's final missing-texture errors without suppressing them. "
           + "Turn it on to record failed required texture lookups, with the def "
           + "and the mod that shipped it. That is the actual cause of most null-texture spam, and the "
           + "report below is what an author needs to fix it. Requires a restart.");
@@ -310,6 +309,7 @@ public sealed class ImageOptCompatMod : Mod
     /// status always says which of the two it is.
     private static string AudioGuardStatus()
     {
+        if (!Settings.guardFailedAudioClips) return "Failed-audio guard: disabled in settings.";
         if (!FailedAudioClipGuard.Installed)
             return "Failed-audio guard: NOT installed - an undecodable sound file can still crash the game.";
 

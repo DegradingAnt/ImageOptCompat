@@ -76,6 +76,7 @@ FIXES FOR IMAGE OPT + FASTER GAME LOADING
 
 FIXES THAT WORK WITHOUT IMAGE OPT
 These are not Image Opt faults. They stay on even when Image Opt is inactive, and each can be switched off in the mod settings.
+- Failed-audio guard - checks both Unity and RimWorld's decoder state before a sound grain reads a failed clip's length. Failed clips use one reusable silent clip, including folder and custom grains; Loading and Unloaded clips are preserved.
 - Null-texture guard - Unity writes "null texture passed to GUI.DrawTexture" every time a mod hands it a missing or destroyed texture. Unity writes that line itself, so the game's own repeat-message filter never sees it and it is written once per call, every frame, for the whole session. On a 1,484-mod load it was measured at 222,128 lines in one session, which is 94 percent of the entire log. Drawing and ticking share one thread, so the cost comes out of tick rate and appears as stutter and low TPS above 1x speed, while 1x looks fine. The patch skips invalid repaint draws by default, preserving the empty appearance even when alpha blending is disabled. It samples the first eight intercepted draws and reports distinct observed callers from that sample. An optional magenta placeholder makes missing textures visible, and an opt-in deep diagnostic collects per-caller counts.
 
 ALSO PATCHES THESE OTHER MODS
@@ -88,7 +89,7 @@ KNOWN GAPS - please read
 - The vehicle livery has not been visually confirmed yet.
 - A mod calling the five-argument GetPixels overload directly is not covered - that one method is native and cannot be patched. The standard overloads are.
 - The null-texture guard has not yet been confirmed in a running game. It is covered by tests and the patch targets are checked against the installed game's own assemblies, but the measured before-and-after log count is still to come.
-- Parts that need a live Unity object, such as the pixel copy itself, cannot run in the test suite. The names every patch binds to are checked against the installed game's assemblies, so a renamed method or argument fails a test instead of quietly switching a fix off.
+- Parts that need a live Unity object, such as the pixel copy itself, still need an in-game check. Patch signatures are checked against the installed assemblies, and a separate regression runner tests real Harmony detours on RimWorld's Mono with native operations replaced by stand-ins.
 
 I used AI tools during development, then checked the changes against the source and tests. MIT licensed; fixes welcome.
 

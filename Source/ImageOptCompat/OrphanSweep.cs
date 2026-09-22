@@ -36,10 +36,14 @@ public static class OrphanSweep
         // SearchOption.AllDirectories, so a parent root already covers every child root: keeping
         // both scanned the same tree twice, over-reported the scanned count, and attempted the
         // same delete twice, which logged a spurious "could not delete" for the second attempt.
-        var unique = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var mods = LoadedModManager.RunningMods;
         if (mods == null) return new List<string>();
 
+        // Collect every candidate texture-folder path first (pure string work), then test
+        // existence in parallel. Directory.Exists is a per-folder P/Invoke and on a large list it
+        // dominates the folder resolution that feeds the sweep below; parallelising it is a direct
+        // load-time saving with no Unity or Verse call in the loop.
+        var candidates = new List<string>();
         foreach (var mod in mods)
         {
             var folders = mod?.foldersToLoadDescendingOrder;
@@ -47,12 +51,20 @@ public static class OrphanSweep
             foreach (var folder in folders)
             {
                 if (string.IsNullOrEmpty(folder)) continue;
-                var texDir = Path.Combine(folder, GenFilePaths.TexturesFolder);
-                if (Directory.Exists(texDir)) unique.Add(Path.GetFullPath(texDir).TrimEnd(Path.DirectorySeparatorChar));
+                candidates.Add(Path.Combine(folder, GenFilePaths.TexturesFolder));
             }
         }
 
-        return new List<string>(OrphanPaths.Deduplicate(unique, Path.DirectorySeparatorChar));
+        // Concurrent so workers add without a lock; the final dedup re-derives uniqueness anyway.
+        var unique = new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
+        var degree = Math.Max(1, Math.Min(Environment.ProcessorCount - 1, 8));
+        Parallel.ForEach(candidates, new ParallelOptions { MaxDegreeOfParallelism = degree }, path =>
+        {
+            if (Directory.Exists(path))
+                unique.TryAdd(Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar), byte.MinValue);
+        });
+
+        return new List<string>(OrphanPaths.Deduplicate(unique.Keys, Path.DirectorySeparatorChar));
     }
 
     /// Sweeps one resolved texture folder. Runs on a worker thread, so it must not call Verse.Log:

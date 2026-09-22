@@ -4,6 +4,7 @@ using System.IO;
 using System.Collections.Concurrent;
 using System.Text;
 using System.Threading.Tasks;
+using System.Linq;
 using Verse;
 
 namespace ImageOptCompat;
@@ -96,12 +97,16 @@ internal static class AssetRequesterScan
                       + "results below may be incomplete.");
         }
 
-        // Merging on one thread keeps the per-asset cap deterministic, which a racing early-exit
-        // inside the loop would not be.
-        foreach (var hit in found)
+        // ConcurrentBag enumeration order depends on worker timing. Sort before applying the cap,
+        // and count distinct mods so six files in one mod cannot hide every other possible owner.
+        foreach (var hit in found.OrderBy(hit => hit.Owner.Mod, StringComparer.Ordinal)
+                     .ThenByDescending(hit => hit.Owner.InCode)
+                     .ThenBy(hit => hit.Owner.File, StringComparer.Ordinal))
         {
             var list = results[hit.Path];
-            if (list.Count < MaxOwnersPerAsset) list.Add(hit.Owner);
+            if (list.Count < MaxOwnersPerAsset
+                && !list.Exists(owner => string.Equals(owner.Mod, hit.Owner.Mod, StringComparison.Ordinal)))
+                list.Add(hit.Owner);
         }
 
         return results;
@@ -225,14 +230,14 @@ internal static class AssetRequesterScan
             var owners = found.TryGetValue(path, out var hits) ? hits : new List<Owner>();
             if (owners.Count == 0)
             {
-                sb.AppendLine("    No mod file contains this string.");
-                sb.AppendLine("    The path is built at runtime, for example by joining a folder and a file name.");
+                sb.AppendLine("    No match in the scanned XML and assembly files.");
+                sb.AppendLine("    Files may have been skipped, or the path may be built at runtime.");
                 sb.AppendLine("    The call stack in the report above is the better clue for this one.");
             }
             else
             {
                 foreach (var o in owners)
-                    sb.AppendLine($"    {(o.InCode ? "IN CODE" : "IN XML ")}  {o.Mod}");
+                    sb.AppendLine($"    {(o.InCode ? "IN CODE" : "IN XML ")}  {o.Mod} — {o.File}");
             }
 
             sb.AppendLine();

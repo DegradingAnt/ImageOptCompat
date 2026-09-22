@@ -184,8 +184,12 @@ internal static class NullTextureGuard
         // "is not null" - that is a reference comparison and skips Unity's alive check entirely.
         if (image != null || !ImageOptCompatMod.Settings.nullTextureGuard) return true;
         // Preserve Unity's invalid-context checks and Layout/input handling. Event.current can
-        // be null outside OnGUI; never dereference it without testing it first.
-        if (!UnityData.IsInMainThread || Event.current == null || Event.current.type != EventType.Repaint)
+        // be null outside OnGUI; never dereference it without testing it first. Read it once into a
+        // local: the null-flood path is the common case the guard exists for, and a redundant second
+        // property read per null draw costs the same every frame with no different result.
+        if (!UnityData.IsInMainThread) return true;
+        var ev = Event.current;
+        if (ev == null || ev.type != EventType.Repaint)
             return true;
 
         // A transparent texture is NOT invisible with alphaBlend=false. Skip the invalid draw

@@ -17,7 +17,7 @@ namespace ImageOptCompat;
 /// Measured on a 1,484-mod load: 60 missing paths produced 60 "MatFrom with null sourceTex" and
 /// 222,128 draw warnings.
 ///
-/// This postfix does two things, and the split between them is the important part.
+/// Two non-generic hooks keep repair and observation separate.
 ///
 /// 1. It REPAIRS one specific, provable failure: a path ending ".dds", which only ever arises from
 ///    a mod stripping a single extension off Image Opt's "name.dds.zstd" cache file. See
@@ -56,20 +56,18 @@ internal static class MissingTextureReport
     {
         try
         {
-            // The closed generic is the patch target; ContentFinder<T> is generic, and only the
-            // Texture2D instantiation is of interest here.
-            var target = AccessTools.Method(typeof(ContentFinder<Texture2D>), nameof(ContentFinder<Texture2D>.Get),
-                new[] { typeof(string), typeof(bool) });
-
-            if (target == null)
-            {
-                Log.Warning("[ImageOptCompat] ContentFinder<Texture2D>.Get(string, bool) was not found. "
-                          + "Missing-texture reporting is off; the game's API may have changed.");
-                return;
-            }
-
+            // Never patch ContentFinder<T>: Mono shares its code across reference types. A
+            // Texture2D patch makes AUDIO requests execute the texture specialization too.
+            // ResourcesAPI.Load is the non-generic fallback reached after all mod holders miss;
+            // its explicit Type argument survives detouring. Log.Error observes only final,
+            // required failures, after the game's asset-bundle fallback has also missed.
+            var target = AccessTools.Method(typeof(ResourcesAPI), "Load", new[] { typeof(string), typeof(Type) });
+            var error = AccessTools.Method(typeof(Log), nameof(Log.Error), new[] { typeof(string) });
+            if (target == null || error == null) throw new MissingMethodException("Texture fallback/report API changed.");
             harmony.Patch(target,
-                postfix: new HarmonyMethod(AccessTools.Method(typeof(MissingTextureReport), nameof(Postfix))));
+                postfix: new HarmonyMethod(AccessTools.Method(typeof(MissingTextureReport), nameof(ResourcePostfix))));
+            harmony.Patch(error,
+                prefix: new HarmonyMethod(AccessTools.Method(typeof(MissingTextureReport), nameof(ObserveError))));
             Installed = true;
         }
         catch (Exception e)
@@ -87,20 +85,57 @@ internal static class MissingTextureReport
     [ThreadStatic]
     private static bool retrying;
 
-    /// Parameter names match ContentFinder<T>.Get exactly - Harmony binds them BY NAME, and a
-    /// mismatch here would bind nothing while still reporting the patch as installed.
-    private static void Postfix(string itemPath, bool reportFailure, ref Texture2D? __result)
+    private static void ResourcePostfix(string path, Type systemTypeInstance, ref UnityEngine.Object? __result)
     {
-        // Unity's == overload: also true for a destroyed texture, which is equally unusable.
-        if (__result != null) return;
-        if (string.IsNullOrEmpty(itemPath)) return;
+        if (__result != null || systemTypeInstance != typeof(Texture2D)) return;
+        if (!ImageOptCompatMod.ImageOptActive || !ImageOptCompatMod.Settings.fixDoubleExtensionPaths) return;
         if (!UnityData.IsInMainThread || retrying) return;
+        const string prefix = "Textures/";
+        if (path == null || !path.StartsWith(prefix, StringComparison.Ordinal)) return;
+        var itemPath = path.Substring(prefix.Length);
+        if (!TryCorrectPath(itemPath, out _)) return;
+        // Direct Resources.Load calls must retain resource-only semantics. The expensive stack
+        // check occurs only for a missing cache-artifact path, never for successful normal reads.
+        try
+        {
+            if (!IsContentFinderCall()) return;
+            // Vanilla tries bundles AFTER Resources. Preserve a real dotted filename in a bundle
+            // before attempting the corrected path, including when a corrected asset also exists.
+            var original = ContentFinder<Texture2D>.TryFindAssetInModBundles(itemPath);
+            if (original != null) { __result = original; return; }
+            Texture2D? repaired = null;
+            if (TryRescueDoubleExtension(itemPath, ref repaired)) __result = repaired;
+        }
+        catch (Exception) { /* A failed repair must leave vanilla's remaining lookup intact. */ }
+    }
 
-        if (TryRescueDoubleExtension(itemPath, ref __result)) return;
-        // The repair installs this same postfix by default. Recording must have its own gate,
-        // and optional existence probes are not missing-content errors.
-        if (!ImageOptCompatMod.Settings.reportMissingTextures || !reportFailure) return;
+    private static bool IsContentFinderCall()
+    {
+        var trace = new System.Diagnostics.StackTrace(false);
+        for (var i = 0; i < trace.FrameCount; i++)
+        {
+            var method = trace.GetFrame(i)?.GetMethod();
+            var type = method?.DeclaringType;
+            if (string.Equals(method?.Name, "Get", StringComparison.Ordinal) && type?.IsGenericType == true
+                && type.GetGenericTypeDefinition() == typeof(ContentFinder<>)) return true;
+        }
+        return false;
+    }
 
+    /// Observe the existing error without suppressing or rewriting it. Optional probes do not
+    /// emit this error, so they never enter the report. The requester is still on the call stack.
+    private static void ObserveError(string text)
+    {
+        if (!ImageOptCompatMod.Settings.reportMissingTextures || !UnityData.IsInMainThread || retrying) return;
+        const string prefix = "Could not load Texture2D at '";
+        const string suffix = " in any active mod or in base resources.";
+        if (text == null || !text.StartsWith(prefix, StringComparison.Ordinal)
+            || !text.EndsWith(suffix, StringComparison.Ordinal)) return;
+        var tail = text.Substring(prefix.Length, text.Length - prefix.Length - suffix.Length);
+        var defMarker = tail.LastIndexOf("' for def '", StringComparison.Ordinal);
+        if (tail.Length == 0 || tail[tail.Length - 1] != '\'') return;
+        var itemPath = defMarker >= 0 ? tail.Substring(0, defMarker) : tail.Substring(0, tail.Length - 1);
+        if (itemPath.Length == 0) return;
         try
         {
             if (!UnityData.IsInMainThread) return;   // Dictionary is not thread-safe

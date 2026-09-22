@@ -4,13 +4,14 @@ namespace HarmonyLib {
  [AttributeUsage(AttributeTargets.Class)]
  public sealed class HarmonyPatch(Type type, string method, params Type[] parameters) : Attribute {}
  public sealed class HarmonyMethod { public HarmonyMethod(Type type, string method) {} public HarmonyMethod(MethodInfo? method) {} }
- public sealed class Harmony { public void Patch(MethodInfo method, HarmonyMethod? prefix=null, HarmonyMethod? postfix=null) {} }
+ public sealed class Harmony { public void Patch(MethodBase method, HarmonyMethod? prefix=null, HarmonyMethod? postfix=null) {} }
  public static class AccessTools {
   public static bool HideImageOpt;
   public static Type? TypeByName(string name) => HideImageOpt && name == "ImageOpt.Texture2DPatch" ? null : typeof(AccessTools).Assembly.GetType(name);
   public static FieldInfo? Field(Type type, string name) => type.GetField(name, BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Static|BindingFlags.Instance);
   public static MethodInfo? Method(Type type, string name) => type.GetMethod(name, BindingFlags.Public|BindingFlags.NonPublic|BindingFlags.Static|BindingFlags.Instance);
   public static MethodInfo? Method(Type type, string name, Type[] args) => type.GetMethod(name,args);
+  public static ConstructorInfo? Constructor(Type type, Type[] args) => type.GetConstructor(args);
  }
 }
 namespace UnityEngine {
@@ -36,13 +37,33 @@ namespace UnityEngine {
  // Audio stand-ins for the failed-audio crash guard. A decode-failed clip stays live but Unity
  // dereferences its absent sample data on clip.length (extern) -> access violation -> hard crash.
  public enum AudioDataLoadState { Unloaded, Loaded, Loading, Failed }
- public sealed class AudioClip : Object { public AudioDataLoadState loadState; }
+ public sealed class AudioClip : Object {
+  public AudioDataLoadState loadState;
+  public string name = "fixture";
+  public static AudioClip Create(string name, int samples, int channels, int frequency, bool stream) => new() { name=name, loadState=AudioDataLoadState.Loaded };
+ }
+ public class ResourcesAPI {
+  public static Func<string,Type,Object?,Object?>? Postprocess;
+  public static readonly Dictionary<string,Object> Assets = new();
+  public Object? Load(string path, Type systemTypeInstance) {
+   Assets.TryGetValue(path, out var result);
+   return Postprocess == null ? result : Postprocess(path,systemTypeInstance,result);
+  }
+ }
  public readonly record struct Color(float r, float g, float b, float a);
  public readonly record struct Rect(float x, float y, float width, float height);
  public class Texture : Object {}
  public static class GUI { public static void DrawTexture(Rect position, Texture image) {} }
  public enum EventType { Layout, Repaint, MouseDown }
- public sealed class Event { public static Event? current; public EventType type; }
+ public sealed class Event {
+  private static Event? value;
+  public static bool RejectWorkerReads;
+  public static Event? current {
+   get { if(RejectWorkerReads && !Verse.UnityData.IsInMainThread) throw new InvalidOperationException("IMGUI accessed off main thread"); return value; }
+   set => Event.value=value;
+  }
+  public EventType type;
+ }
  public sealed class Texture2D : Texture {
   public static string? FailAt;
   public static string LastRead = "";
@@ -83,7 +104,11 @@ namespace UnityEngine {
   public static void ReleaseTemporary(RenderTexture tex) { Outstanding--; }
  }
  public static class Graphics {
-  public static void Blit(Texture2D src,RenderTexture rt) { if(Texture2D.FailAt=="Blit") throw new InvalidOperationException("injected Blit"); }
+  // OnBlit fires once per texture conversion, from INSIDE ConvertHolder's loop. That is the exact
+  // point a reentrant caller could insert into the collection. This tests reentrancy only; the
+  // actual boot failure was Mono invalidating enumeration on our own existing-key overwrite.
+  public static Action? OnBlit;
+  public static void Blit(Texture2D src,RenderTexture rt) { OnBlit?.Invoke(); if(Texture2D.FailAt=="Blit") throw new InvalidOperationException("injected Blit"); }
  }
 }
 namespace Verse {
@@ -102,7 +127,7 @@ namespace Verse {
    set => main=value;
   }
  }
- public sealed class ModContentPack { public string PackageId="smashphil.vehicleframework"; public string Name="Fixture mod"; public ModAssemblies assemblies=new(); public List<string> foldersToLoadDescendingOrder=new(); public bool AnyContentLoaded() => true; }
+ public sealed class ModContentPack { public string PackageId="smashphil.vehicleframework"; public string Name="Fixture mod"; public string RootDir=""; public ModAssemblies assemblies=new(); public List<string> foldersToLoadDescendingOrder=new(); public bool AnyContentLoaded() => true; }
  public sealed class ModAssemblies { public List<Assembly> loadedAssemblies=new(); }
  public class Def { public string defName="FixtureDef"; public ModContentPack? modContentPack; }
  public static class ContentFinderRequester { public static Def? requester; }
@@ -111,22 +136,40 @@ namespace Verse {
  public static class LongEventHandler { public static void QueueLongEvent(Action action,string? text,bool async,object? handler) { Pending.Add(action); } public static List<Action> Pending=new(); }
  public static class ContentFinder<T> where T:class {
   public static readonly Dictionary<string,T> Assets=new();
+  public static readonly Dictionary<string,T> Bundles=new();
   public static readonly List<string> Requests=new();
-  public static Func<string,bool,T?,T?>? Postprocess;
+  public static T? TryFindAssetInModBundles(string path) => Bundles.TryGetValue(path,out var result) ? result : null;
+  [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
   public static T? Get(string itemPath,bool reportFailure=true) {
    Requests.Add(itemPath);
+   if (!UnityData.IsInMainThread) return null;
    Assets.TryGetValue(itemPath,out var result);
-   return Postprocess == null ? result : Postprocess(itemPath,reportFailure,result);
+   if(result != null) return result;
+   result = new UnityEngine.ResourcesAPI().Load((typeof(T)==typeof(UnityEngine.Texture2D) ? "Textures/" : "Sounds/")+itemPath,typeof(T)) as T;
+   result ??= TryFindAssetInModBundles(itemPath);
+   if(result == null && reportFailure) Log.Error("Could not load " + typeof(T).Name + " at '" + itemPath + "'" + (ContentFinderRequester.requester == null ? "" : " for def '"+ContentFinderRequester.requester.defName+"'") + " in any active mod or in base resources.");
+   return result;
   }
  }
  public sealed class ModContentHolder<T> { public Dictionary<string,T> contentList=new(); }
  public static class LoadedModManager { public static List<ModContentPack> RunningMods=new(); }
  public static class GenFilePaths { public const string TexturesFolder="Textures"; }
  public static class Log {
+  public static Action<string>? ErrorObserver;
+  public static void Error(string text) => ErrorObserver?.Invoke(text);
   public static List<string> Warnings=new();
   public static void Warning(string message) => Warnings.Add(message);
   public static void Message(string message) {}
  }
+}
+namespace RuntimeAudioClipLoader {
+ public static class Manager {
+  public static readonly Dictionary<UnityEngine.AudioClip,UnityEngine.AudioDataLoadState> States = new();
+  public static UnityEngine.AudioDataLoadState GetAudioClipLoadState(UnityEngine.AudioClip clip) => States.TryGetValue(clip,out var state) ? state : UnityEngine.AudioDataLoadState.Unloaded;
+ }
+}
+namespace Verse.Sound {
+ public class ResolvedGrain_Clip { public ResolvedGrain_Clip(UnityEngine.AudioClip clip) {} }
 }
 namespace ImageOptCompat {
  public sealed class Settings { public bool vehicleReadback=true,recompressCopies=true,genericPixelReadback=true,nullTextureGuard=true,fixDoubleExtensionPaths=true,guardFailedAudioClips=true; public bool verbose,destroyOriginalTexture,nullTextureShowPlaceholder,nullTextureDeepDiagnostic,reportMissingTextures; }

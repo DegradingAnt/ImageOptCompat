@@ -68,35 +68,25 @@ public class AudioApiContractTests
 
     // ---- the patch target -------------------------------------------------------------------
 
-    /// FailedAudioClipGuard postfixes this exact overload. ContentFinder is generic, and the guard
-    /// patches the AudioClip instantiation of it.
     [Test]
-    public void ContentFinderHasTheGetOverloadTheGuardPatches()
+    public void GuardTargetsANonGenericConstructorWithNamedClip()
     {
-        var finder = GetType("Assembly-CSharp.dll", "Verse.ContentFinder`1");
-
-        var get = finder.GetMethods(AllDeclared)
-            .Where(m => string.Equals(m.Name, "Get", StringComparison.Ordinal))
-            .FirstOrDefault(m => m.GetParameters().Length == 2
-                              && m.GetParameters()[0].ParameterType.FullName == "System.String");
-
-        Assert.That(get, Is.Not.Null,
-            "Verse.ContentFinder<T>.Get(string, bool) is gone. FailedAudioClipGuard would patch nothing.");
+        var grain = GetType("Assembly-CSharp.dll", "Verse.Sound.ResolvedGrain_Clip");
+        var ctor = grain.GetConstructors().Single(c => c.GetParameters().Length == 1);
+        Assert.That(grain.IsGenericType, Is.False);
+        Assert.That(ctor.GetMethodBody(), Is.Not.Null);
+        Assert.That(ctor.GetParameters()[0].Name, Is.EqualTo("clip"));
+        Assert.That(ctor.GetParameters()[0].ParameterType.FullName, Is.EqualTo("UnityEngine.AudioClip"));
     }
 
-    /// Harmony binds injected parameters BY NAME. The postfix declares itemPath, so the original
-    /// must still call it that or the guard binds nothing and the crash returns.
     [Test]
-    public void TheGetOverloadStillNamesItsFirstArgumentItemPath()
+    public void RimWorldLoaderExposesItsSeparateDecodeState()
     {
-        var finder = GetType("Assembly-CSharp.dll", "Verse.ContentFinder`1");
-
-        var get = finder.GetMethods(AllDeclared)
-            .Where(m => string.Equals(m.Name, "Get", StringComparison.Ordinal))
-            .First(m => m.GetParameters().Length == 2);
-
-        Assert.That(get.GetParameters()[0].Name, Is.EqualTo("itemPath"),
-            "ContentFinder.Get renamed its path argument; FailedAudioClipGuard binds 'itemPath'.");
+        var manager = GetType("Assembly-CSharp.dll", "RuntimeAudioClipLoader.Manager");
+        var get = manager.GetMethod("GetAudioClipLoadState", AllDeclared)!;
+        Assert.That(get.IsStatic, Is.True);
+        Assert.That(get.ReturnType.FullName, Is.EqualTo("UnityEngine.AudioDataLoadState"));
+        Assert.That(get.GetParameters()[0].ParameterType.FullName, Is.EqualTo("UnityEngine.AudioClip"));
     }
 
     // ---- the state the guard reads -----------------------------------------------------------
@@ -169,15 +159,16 @@ public class AudioApiContractTests
           + "and the reasoning behind the failed-audio guard should be revisited.");
     }
 
-    /// RimWorld's own null guard, which fired 625 times in the crash run. The fix depends on it:
-    /// the guard reports a decode-failed clip as missing so THIS check handles it.
+    /// Both built-in grain sources still resolve through the guarded constructor.
     [Test]
-    public void AudioGrainClipStillGuardsAgainstAMissingClip()
+    public void BuiltInGrainSourcesStillExposeResolution()
     {
         var grain = GetType("Assembly-CSharp.dll", "Verse.Sound.AudioGrain_Clip");
 
         Assert.That(grain.GetMethods(AllDeclared).Any(m =>
                 string.Equals(m.Name, "GetResolvedGrains", StringComparison.Ordinal)), Is.True,
             "AudioGrain_Clip.GetResolvedGrains is gone; the vanilla guard the fix relies on may have moved.");
+        var folder = GetType("Assembly-CSharp.dll", "Verse.Sound.AudioGrain_Folder");
+        Assert.That(folder.GetMethod("GetResolvedGrains", AllDeclared), Is.Not.Null);
     }
 }

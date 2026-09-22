@@ -77,13 +77,19 @@ public sealed class InstalledModContractTests
         });
 
     [Test]
-    public void MissingTexturePostfixArgumentsMatchInstalledContentFinder()
+    public void MissingTextureHooksUseNonGenericMethodsWithExplicitType()
     {
         if (!Directory.Exists(Managed)) Assert.Ignore("Installed RimWorld unavailable.");
         using var context = new MetadataLoadContext(new PathAssemblyResolver(Directory.GetFiles(Managed, "*.dll")), "mscorlib");
         var game = context.LoadFromAssemblyPath(Path.Combine(Managed, "Assembly-CSharp.dll"));
-        var target = game.GetType("Verse.ContentFinder`1")!.GetMethod("Get", All)!;
-        Assert.That(target.GetParameters().Select(p => p.Name), Is.EqualTo(new[] { "itemPath", "reportFailure" }));
-        Assert.That(target.GetParameters()[1].ParameterType.FullName, Is.EqualTo("System.Boolean"));
+        var unity = context.LoadFromAssemblyPath(Path.Combine(Managed, "UnityEngine.CoreModule.dll"));
+        var target = unity.GetType("UnityEngine.ResourcesAPI")!.GetMethod("Load", All)!;
+        Assert.That(target.DeclaringType!.IsGenericType, Is.False);
+        Assert.That(target.GetMethodBody(), Is.Not.Null);
+        Assert.That(target.GetParameters().Select(p => p.Name), Is.EqualTo(new[] { "path", "systemTypeInstance" }));
+        Assert.That(target.GetParameters()[1].ParameterType.FullName, Is.EqualTo("System.Type"));
+        Assert.That(target.ReturnType.FullName, Is.EqualTo("UnityEngine.Object"));
+        var error = game.GetType("Verse.Log")!.GetMethods(All).Single(m => m.Name == "Error");
+        Assert.That(error.GetParameters().Select(p => p.Name), Is.EqualTo(new[] { "text" }));
     }
 }

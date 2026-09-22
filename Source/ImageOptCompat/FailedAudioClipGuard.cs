@@ -3,55 +3,33 @@ using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 using Verse;
+using Verse.Sound;
 
 namespace ImageOptCompat;
 
-/// Stops a hard crash in Unity's native audio code when a mod ships a sound file Unity cannot
-/// decode.
-///
-/// MEASURED CRASH (2026-09-21, two runs, both died the same way):
-///     UnityEngine.AudioClip:get_length
-///     Verse.Sound.ResolvedGrain_Clip:.ctor
-///     Verse.Sound.AudioGrain_Clip/&lt;GetResolvedGrains&gt;d__1:MoveNext
-///     Verse.Sound.SubSoundDef:&lt;ResolveReferences&gt;b__37_0
-///     FasterGameLoading.DeferredLoader/&lt;ResolveSubSoundDefsCoroutine&gt;d__5:MoveNext
-///
-/// The chain, and why nothing already in place catches it:
-///
-///  - Verse.ModContentLoader.LoadItem gives a FAILED TEXTURE a fallback (BaseContent.BadTex) and
-///    gives FAILED AUDIO nothing, returning null. That asymmetry is vanilla behaviour.
-///  - Verse.Sound.AudioGrain_Clip.GetResolvedGrains does guard the plain case:
-///    `if (audioClip != null)`. Unity's operator makes that catch a destroyed clip too, and it
-///    fired 625 times in the crash run. So a missing clip is handled correctly.
-///  - The clip that crashed therefore PASSED that guard. It is a live AudioClip whose audio data
-///    failed to decode. ResolvedGrain_Clip's constructor then reads `clip.length`, which is
-///    extern, and Unity dereferences the absent sample data. That is an access violation, not a
-///    managed exception.
-///  - Faster Game Loading wraps each resolution in try/catch and logs "Error resolving AudioGrain".
-///    A catch block cannot catch an access violation, so its guard does not help here.
-///
-/// THE FIX, and why it is shaped this way: report a decode-failed clip as MISSING, so RimWorld's
-/// own guard above handles it on the path it already has. Nothing here replaces vanilla or Faster
-/// Game Loading behaviour, and no new error path is invented.
-///
-/// Only AudioDataLoadState.Failed is treated as missing. Unloaded and Loading are normal states
-/// for a clip that streams or has not been touched yet, and nulling those would silence sounds
-/// that were going to work.
+/// Guards the non-generic sound-grain constructor before it reads AudioClip.length. A failed
+/// decoder can leave a live clip whose length is unsafe to read. Both Unity and RimWorld's own
+/// RuntimeAudioClipLoader maintain load state, so either Failed state rejects the clip.
+/// A shared silent clip preserves a valid grain for clip, folder and custom grain callers.
+/// This avoids patching ContentFinder<T>, whose reference-type specializations share code on Mono.
 internal static class FailedAudioClipGuard
 {
-    /// Clips reported as missing this session.
+    /// Failed clips replaced in sound grains this session.
     internal static int Suppressed;
 
-    /// The paths involved, so the settings report can name them without trawling the log.
+    /// Clip names (the runtime loader uses source paths), for the diagnostic report.
     /// Bounded: a broken mod can ask for the same clip repeatedly.
     private static readonly HashSet<string> SuppressedPaths = new(StringComparer.Ordinal);
 
     private const int MaxNamedPaths = 64;
+    private static AudioClip? silentClip;
 
     /// A line for the diagnostic report. States whether the guard is even watching, because a
     /// crash guard that found nothing and one that never installed read identically otherwise.
     internal static string ReportLine()
     {
+        if (!ImageOptCompatMod.Settings.guardFailedAudioClips)
+            return "Failed-audio guard: disabled in settings.";
         if (!Installed)
             return "Failed-audio guard: NOT INSTALLED. An undecodable sound file can still crash the game.";
 
@@ -61,7 +39,7 @@ internal static class FailedAudioClipGuard
         var sb = new System.Text.StringBuilder();
         sb.AppendLine($"Failed-audio guard: {Suppressed} interception(s) across {SuppressedPaths.Count} clip(s).");
         sb.AppendLine("These sound files exist but the engine cannot decode them. Reading their length");
-        sb.AppendLine("would crash the game, so they are reported as missing instead. The mod shipping");
+        sb.AppendLine("is unsafe, so the grain uses a silent clip instead. The mod shipping");
         sb.AppendLine("them should re-encode to 16-bit PCM WAV or OGG:");
 
         foreach (var p in SuppressedPaths) sb.AppendLine($"    {p}");
@@ -75,19 +53,21 @@ internal static class FailedAudioClipGuard
     {
         try
         {
-            var target = AccessTools.Method(typeof(ContentFinder<AudioClip>), nameof(ContentFinder<AudioClip>.Get),
-                new[] { typeof(string), typeof(bool) });
+            // ContentFinder<AudioClip>.Get shares code with Texture2D on Mono: patching it
+            // redirects texture requests into the audio lookup. Guard the non-generic consumer
+            // instead. This also covers folder grains and custom grains that bypass Get entirely.
+            var target = AccessTools.Constructor(typeof(ResolvedGrain_Clip), new[] { typeof(AudioClip) });
 
             if (target == null)
             {
-                Log.Warning("[ImageOptCompat] ContentFinder<AudioClip>.Get(string, bool) was not found. "
+                Log.Warning("[ImageOptCompat] ResolvedGrain_Clip(AudioClip) was not found. "
                           + "The failed-audio guard is OFF, so a mod with an undecodable sound file can still "
                           + "crash the game in Unity's audio code.");
                 return;
             }
 
             harmony.Patch(target,
-                postfix: new HarmonyMethod(AccessTools.Method(typeof(FailedAudioClipGuard), nameof(Postfix))));
+                prefix: new HarmonyMethod(AccessTools.Method(typeof(FailedAudioClipGuard), nameof(Prefix))));
             Installed = true;
         }
         catch (Exception e)
@@ -96,9 +76,26 @@ internal static class FailedAudioClipGuard
         }
     }
 
-    /// Parameter names match ContentFinder&lt;T&gt;.Get exactly. Harmony binds them BY NAME, and a
-    /// mismatch would bind nothing while still reporting the patch as installed.
-    private static void Postfix(string itemPath, ref AudioClip? __result)
+    private static void Prefix(ref AudioClip clip)
+    {
+        if (!ImageOptCompatMod.Settings.guardFailedAudioClips || clip == null) return;
+        AudioClip? candidate = clip;
+        string name;
+        try { name = clip.name; }
+        catch { name = "<unreadable clip>"; }
+        FilterFailed(name, ref candidate);
+        if (candidate != null) return;
+
+        // Skipping a constructor would leave a half-initialized grain that later dereferences
+        // clip. One owned silent clip keeps every downstream consumer valid. Created only
+        // on failure, never for ordinary Loading/Unloaded clips, and reused for the session.
+        // Use a second, not one PCM frame: SubSustainer repeats short clips as often as 100 Hz.
+        if (silentClip == null)
+            silentClip = AudioClip.Create("ImageOptCompat failed audio", 44100, 1, 44100, false);
+        clip = silentClip!;
+    }
+
+    private static void FilterFailed(string itemPath, ref AudioClip? __result)
     {
         if (!ImageOptCompatMod.Settings.guardFailedAudioClips) return;
 
@@ -110,6 +107,12 @@ internal static class FailedAudioClipGuard
         try
         {
             state = __result!.loadState;
+            // RimWorld's RuntimeAudioClipLoader creates a live Unity clip before decoding PCM.
+            // Its own dictionary can say Failed while Unity still says Loaded. Keep the Unity
+            // failure as well: Manager.GetAudioClipLoadState returns Unloaded for untracked clips.
+            if (state != AudioDataLoadState.Failed
+                && RuntimeAudioClipLoader.Manager.GetAudioClipLoadState(__result) == AudioDataLoadState.Failed)
+                state = AudioDataLoadState.Failed;
         }
         catch (Exception)
         {
@@ -130,7 +133,7 @@ internal static class FailedAudioClipGuard
         if (SuppressedPaths.Count >= MaxNamedPaths || !SuppressedPaths.Add(itemPath)) return;
 
         Log.Warning($"[ImageOptCompat] the sound file for '{itemPath}' failed to decode, so it is being "
-                  + "reported as missing. Reading its length would crash the game in Unity's native audio "
+                  + "replaced with silence for sound grains. Reading its length may crash Unity's native audio "
                   + "code. The mod that ships this file needs to re-encode it as a standard PCM WAV or OGG.");
     }
 }

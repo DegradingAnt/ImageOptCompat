@@ -34,6 +34,11 @@ public static class VehicleReadback
         if (holder?.contentList == null) return;
 
         var converted = 0;
+        // Required even with one writer: RimWorld's Mono mscorlib increments Dictionary._version
+        // at entry to TryInsert, INCLUDING OverwriteExisting. Replacing our own values therefore
+        // invalidates a live Keys enumerator. The net9 test runtime behaves differently.
+        // Verified with the installed Mono runtime; see the Mono regression probe. This is not
+        // synchronization against external writers: Image Opt's prefix completes before us.
         foreach (var key in holder.contentList.Keys.ToList())
         {
             var src = holder.contentList[key];
