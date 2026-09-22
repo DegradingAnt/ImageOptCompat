@@ -64,8 +64,12 @@ of about two hours. See "Measured results" in the README.
 ### Changed
 - **The mod uses its full name everywhere players see it.** The Mod Settings entry said
   "ImageOptCompat", and every log line began with "[ImageOptCompat]". Neither matched anything in
-  the mod list. Both now read "Image Opt + Faster Game Loading Compatibility Patch". The package id
-  is unchanged, so saved settings carry over.
+  the mod list. Both now read "Image Opt + Faster Game Loading Compatibility Patch".
+- **New package id: `DegradingAnt.RimCompat`.** 0.2.0 used `degradingant.imageoptcompat`. The mod
+  does more than patch Image Opt and Faster Game Loading, so its id names neither; the title and
+  the preview keep the full name. Settings carry over, because RimWorld stores them by the mod's
+  folder, not its id. If you installed 0.2.0 from GitHub, enable the mod again once in the mod
+  list; a save made with 0.2.0 shows the game's mod-list notice once.
 - Texture repair now hooks the game's non-generic resource fallback. The missing-texture report
   watches the game's final error lines and never suppresses them.
 - The orphan sweep checks texture folders in parallel.

@@ -2,7 +2,7 @@
 <ModMetaData>
   <name>Image Opt + Faster Game Loading Compatibility Patch</name>
   <author>DegradingAnt</author>
-  <packageId>degradingant.imageoptcompat</packageId>
+  <packageId>DegradingAnt.RimCompat</packageId>
   <url>https://github.com/DegradingAnt/ImageOptCompat</url>
   <supportedVersions><li>1.6</li></supportedVersions>
   <modVersion>0.3.0</modVersion>
