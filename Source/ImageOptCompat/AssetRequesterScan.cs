@@ -94,7 +94,7 @@ internal static class AssetRequesterScan
         catch (AggregateException e)
         {
             // One unreadable file must not lose the whole scan. Report what was gathered.
-            Log.Warning($"{ModInfo.Tag} the asset scan hit {e.InnerExceptions.Count} error(s); "
+            global::ImageOptCompat.Report.Requested($"the asset scan hit {e.InnerExceptions.Count} error(s); "
                       + "results below may be incomplete.");
         }
 

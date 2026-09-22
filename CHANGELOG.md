@@ -15,6 +15,14 @@ First Workshop release. Boot-tested on the full Progression pack (about 1,485 mo
 of about two hours. See "Measured results" in the README.
 
 ### Added
+- **Report level setting.** Choose how much the mod tells you. "Game-breaking problems only" writes
+  just those, and only to the log. "Important problems" is the default: game-breaking problems plus
+  problems one of this mod's settings can fix, shown once on screen after loading and written to
+  the log. "Everything" also logs what each fix did. This replaces the old "Verbose logging"
+  switch; a saved "verbose" setting carries over as Everything.
+- **Main-menu status line.** Like the Harmony mod's version line, a faded line in the main-menu
+  corner says whether the mod found problems. Hover over it for details. Problems found while
+  loading are shown once, together, in one dialog.
 - **Failed-audio guard.** A sound the game cannot decode now plays as silence, instead of having its
   length read, which can crash Unity's audio code. It checks both Unity's and RimWorld's own decoder
   state, and covers clip, folder and custom sound grains. Works with or without Image Opt, and has
@@ -40,6 +48,8 @@ of about two hours. See "Measured results" in the README.
 - Texture repair now hooks the game's non-generic resource fallback. The missing-texture report
   watches the game's final error lines and never suppresses them.
 - The orphan sweep checks texture folders in parallel.
+- All log output goes through one place and follows the report level. A problem that can break
+  loading is now logged as an error, as the Harmony mod does; other problems remain warnings.
 
 ### Fixed
 - **Audio lookups were being run as texture lookups.** RimWorld's Mono runtime shares

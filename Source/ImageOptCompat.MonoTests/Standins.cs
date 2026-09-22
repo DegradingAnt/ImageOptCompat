@@ -104,7 +104,8 @@ namespace ImageOptCompat
 {
     public sealed class Settings
     {
-        public bool guardFailedAudioClips = true, fixDoubleExtensionPaths = true, reportMissingTextures = true, verbose;
+        public bool guardFailedAudioClips = true, fixDoubleExtensionPaths = true, reportMissingTextures = true;
+        public ReportLevel reportLevel = ReportLevel.Important;
     }
     public static class ImageOptCompatMod
     {

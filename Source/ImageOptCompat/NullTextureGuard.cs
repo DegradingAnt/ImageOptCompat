@@ -92,19 +92,19 @@ internal static class NullTextureGuard
                 catch (Exception e)
                 {
                     // One unpatchable overload must not cost us the other eight.
-                    Log.Warning($"{ModInfo.Tag} could not guard {target.Name}: {e.Message}");
+                    Report.Write(ReportKind.Problem, $"could not guard {target.Name}: {e.Message}");
                 }
             }
 
             if (InstalledCount == 0)
-                Log.Warning(ModInfo.Tag + " null-texture guard found no GUI.DrawTexture overloads to patch. "
+                Report.Write(ReportKind.Problem, "null-texture guard found no GUI.DrawTexture overloads to patch. "
                           + "Unity's IMGUI module may have changed; the null-texture log flood is NOT being stopped.");
-            else if (ImageOptCompatMod.Settings.verbose)
-                Log.Message($"{ModInfo.Tag} null-texture guard installed on {InstalledCount} draw method(s).");
+            else
+                Report.Write(ReportKind.Info, $"null-texture guard installed on {InstalledCount} draw method(s).");
         }
         catch (Exception e)
         {
-            Log.Warning($"{ModInfo.Tag} null-texture guard could not be installed: {e.Message}");
+            Report.Write(ReportKind.Problem, $"null-texture guard could not be installed: {e.Message}");
         }
     }
 
@@ -204,7 +204,7 @@ internal static class NullTextureGuard
         if (!floodSummarized && ShouldSummarizeFlood(Substituted, FloodHintThreshold))
         {
             floodSummarized = true;
-            Log.Message(ModInfo.Tag + " null-texture guard: " + Substituted + " null draw(s) intercepted so far. "
+            Report.Write(ReportKind.Hint, "null-texture guard: " + Substituted + " null draw(s) intercepted so far. "
                       + "Open the settings page for the 'Copy diagnostic report' button, or turn on "
                       + "'Show a placeholder' to see which elements are missing their texture.");
         }
@@ -248,14 +248,14 @@ internal static class NullTextureGuard
                   + "every frame. No single mod's code is on the call stack, so the owner cannot be named "
                   + "from here. ";
 
-            Log.Warning(ModInfo.Tag + " " + who
+            Report.Write(ReportKind.Notice, who
                       + $"Only the first {MaxReportedSites} null draws are sampled; turn on the deep diagnostic "
                       + "in this patch's settings for a full per-mod count.");
         }
         catch (Exception e)
         {
             // Diagnostics must never be the thing that breaks the frame.
-            Log.Warning($"{ModInfo.Tag} null-texture guard could not identify a call site: {e.Message}");
+            Report.Write(ReportKind.Info, $"null-texture guard could not identify a call site: {e.Message}");
         }
     }
 

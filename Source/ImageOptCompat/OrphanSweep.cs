@@ -70,15 +70,15 @@ public static class OrphanSweep
     /// Sweeps one resolved texture folder. Runs on a worker thread, so it must not call Verse.Log:
     /// RimWorld's log appends to a shared list and feeds the debug window, and neither is thread
     /// safe. Messages are handed back and written by the caller on its own thread instead.
-    private static void SweepDir(string texDir, ref int deleted, ref int scanned, ConcurrentQueue<string> messages)
+    private static void SweepDir(string texDir, ref int deleted, ref int scanned,
+                                 ConcurrentQueue<(ReportKind Kind, string Text)> messages, bool detail)
     {
-        var verbose = ImageOptCompatMod.Settings.verbose;
         string[] files;
 
         try { files = Directory.GetFiles(texDir, "*.dds.zstd", SearchOption.AllDirectories); }
         catch (Exception e)
         {
-            if (verbose) messages.Enqueue($"{ModInfo.Tag} enumerate failed '{texDir}': {e.Message}");
+            if (detail) messages.Enqueue((ReportKind.Info, $"enumerate failed '{texDir}': {e.Message}"));
             return;
         }
 
@@ -90,9 +90,9 @@ public static class OrphanSweep
             {
                 File.Delete(f);
                 deleted++;
-                if (verbose) messages.Enqueue($"{ModInfo.Tag} orphan removed: {f}");
+                if (detail) messages.Enqueue((ReportKind.Info, $"orphan removed: {f}"));
             }
-            catch (Exception e) { messages.Enqueue($"{ModInfo.Tag} could not delete '{f}': {e.Message}"); }
+            catch (Exception e) { messages.Enqueue((ReportKind.Notice, $"could not delete '{f}': {e.Message}")); }
         }
     }
 
@@ -109,8 +109,11 @@ public static class OrphanSweep
     {
         var totalDeleted = 0;
         var totalScanned = 0;
-        var messages = new ConcurrentQueue<string>();
+        var messages = new ConcurrentQueue<(ReportKind Kind, string Text)>();
         var degree = Math.Max(1, Math.Min(Environment.ProcessorCount - 1, 8));
+
+        // Decided once, here: per-file lines are Info, so they are only worth building at Everything.
+        var detail = Report.Logs(ReportKind.Info);
 
         try
         {
@@ -118,19 +121,19 @@ public static class OrphanSweep
             {
                 var d = 0;
                 var s = 0;
-                SweepDir(root, ref d, ref s, messages);
+                SweepDir(root, ref d, ref s, messages, detail);
                 Interlocked.Add(ref totalDeleted, d);
                 Interlocked.Add(ref totalScanned, s);
             });
         }
         catch (AggregateException e)
         {
-            messages.Enqueue($"{ModInfo.Tag} the sweep hit {e.InnerExceptions.Count} error(s); "
-                           + "some folders may not have been swept.");
+            messages.Enqueue((ReportKind.Notice, $"the sweep hit {e.InnerExceptions.Count} error(s); "
+                                               + "some folders may not have been swept."));
         }
 
         // Back on the calling thread, where Verse.Log is safe again.
-        while (messages.TryDequeue(out var line)) Log.Warning(line);
+        while (messages.TryDequeue(out var message)) Report.Write(message.Kind, message.Text);
 
         deleted = totalDeleted;
         scanned = totalScanned;
@@ -151,7 +154,7 @@ public static class OrphanSweep
             // the kind of stale readout that misleads a later diagnosis.
             LastDeleted = 0;
             LastScanned = 0;
-            Log.Message(ModInfo.Tag + " sweep skipped - Image Opt is not active, so nothing here owns any .dds.zstd.");
+            Report.Write(ReportKind.Info, "sweep skipped - Image Opt is not active, so nothing here owns any .dds.zstd.");
             return;
         }
 
@@ -179,8 +182,8 @@ public static class OrphanSweep
         LastDeleted = deleted;
         LastScanned = scanned;
         if (deleted > 0)
-            Log.Message($"{ModInfo.Tag} swept {deleted.ToString(CultureInfo.InvariantCulture)} orphaned .dds.zstd of {scanned.ToString(CultureInfo.InvariantCulture)} scanned across {roots.Count.ToString(CultureInfo.InvariantCulture)} texture folder(s).");
-        else if (ImageOptCompatMod.Settings.verbose)
-            Log.Message($"{ModInfo.Tag} no orphans among {scanned.ToString(CultureInfo.InvariantCulture)} .dds.zstd in {roots.Count.ToString(CultureInfo.InvariantCulture)} folder(s).");
+            Report.Write(ReportKind.Info, $"swept {deleted.ToString(CultureInfo.InvariantCulture)} orphaned .dds.zstd of {scanned.ToString(CultureInfo.InvariantCulture)} scanned across {roots.Count.ToString(CultureInfo.InvariantCulture)} texture folder(s).");
+        else
+            Report.Write(ReportKind.Info, $"no orphans among {scanned.ToString(CultureInfo.InvariantCulture)} .dds.zstd in {roots.Count.ToString(CultureInfo.InvariantCulture)} folder(s).");
     }
 }

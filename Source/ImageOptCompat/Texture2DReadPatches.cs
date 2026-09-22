@@ -48,7 +48,7 @@ internal static class Texture2DReadPatches
         // Fail open, but NOT silently: a renamed field in a newer Image Opt would otherwise switch
         // this whole fix off with no sign anything had changed.
         if (nativeIds == null && ImageOptCompatMod.ImageOptActive)
-            Log.Warning(ModInfo.Tag + " Image Opt is active but ImageOpt.Texture2DPatch.NativeTextures was not found. "
+            Report.Write(ReportKind.Problem, "Image Opt is active but ImageOpt.Texture2DPatch.NativeTextures was not found. "
                       + "The generic pixel-readback fix is disabled. Image Opt may have changed version.");
         return nativeIds;
     }
@@ -103,7 +103,7 @@ internal static class Texture2DReadPatches
         foreach (var copy in OwnedCopies)
         {
             try { if (copy != null) UnityEngine.Object.DestroyImmediate(copy); }
-            catch (Exception e) { Log.Warning($"{ModInfo.Tag} cached texture cleanup failed: {e.Message}"); }
+            catch (Exception e) { Report.Write(ReportKind.Notice, $"cached texture cleanup failed: {e.Message}"); }
         }
         OwnedCopies.Clear();
         Copies = new ConditionalWeakTable<Texture2D, Texture2D>();

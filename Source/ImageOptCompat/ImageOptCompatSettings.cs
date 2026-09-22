@@ -24,7 +24,10 @@ public sealed class ImageOptCompatSettings : ModSettings
     public bool guardFailedAudioClips = true;
     public bool recompressCopies = true;
     public bool destroyOriginalTexture;
-    public bool verbose;
+
+    // How much this mod tells the player. Important by default: game-breaking problems and
+    // problems one of these settings can fix, and nothing else on screen. Replaces "verbose".
+    public ReportLevel reportLevel = ReportLevel.Important;
 
     public override void ExposeData()
     {
@@ -40,7 +43,13 @@ public sealed class ImageOptCompatSettings : ModSettings
         Scribe_Values.Look(ref guardFailedAudioClips, "guardFailedAudioClips", true);
         Scribe_Values.Look(ref recompressCopies, "recompressCopies", true);
         Scribe_Values.Look(ref destroyOriginalTexture, "destroyOriginalTexture", false);
-        Scribe_Values.Look(ref verbose, "verbose", false);
+        Scribe_Values.Look(ref reportLevel, "reportLevel", ReportLevel.Important);
+
+        // Read once so a player who had "verbose" on keeps seeing everything. Never written back:
+        // false equals the default, so Scribe omits it on save and the old key simply disappears.
+        var legacyVerbose = false;
+        Scribe_Values.Look(ref legacyVerbose, "verbose", false);
+        reportLevel = Report.Migrate(reportLevel, legacyVerbose);
         base.ExposeData();
     }
 }

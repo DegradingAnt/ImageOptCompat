@@ -56,6 +56,31 @@ public class ModMetadataTests
         Assert.That(offenders, Is.Empty);
     }
 
+    /// The report level only works if nothing bypasses it. Before it existed, each file wrote to
+    /// the log directly and chose its own severity, so no setting could have governed them.
+    [Test]
+    public void OnlyReportWritesToTheLog()
+    {
+        var offenders = Directory.GetFiles(Path.Combine(RepoRoot(), "Source", "ImageOptCompat"), "*.cs")
+            .Where(file => !string.Equals(Path.GetFileName(file), "Report.cs", StringComparison.Ordinal))
+            .SelectMany(file => File.ReadLines(file).Select((line, i) => (file, line, number: i + 1)))
+            .Where(x => !x.line.TrimStart().StartsWith("//", StringComparison.Ordinal)
+                     && (x.line.Contains("Log.Message(", StringComparison.Ordinal)
+                      || x.line.Contains("Log.Warning(", StringComparison.Ordinal)
+                      || x.line.Contains("Log.Error(", StringComparison.Ordinal)))
+            .Select(x => $"{Path.GetFileName(x.file)}:{x.number}")
+            .ToList();
+
+        Assert.That(offenders, Is.Empty);
+    }
+
+    /// Ant's default: game-breaking problems and problems this mod's settings can fix.
+    [Test]
+    public void DefaultReportLevelIsImportant() =>
+        Assert.That(ProductionSource("ImageOptCompatSettings.cs"),
+            Does.Contain("public ReportLevel reportLevel = ReportLevel.Important;")
+                .And.Contain("Scribe_Values.Look(ref reportLevel, \"reportLevel\", ReportLevel.Important);"));
+
     /// The Mod Settings list showed "ImageOptCompat" before the name was a single constant.
     [Test]
     public void SettingsEntryUsesTheName() =>

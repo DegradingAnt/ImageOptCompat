@@ -50,6 +50,9 @@ public sealed class RuntimeLogicTests
         LoadedModManager.RunningMods.Clear();
         ModAttribution.Reset();
         Log.Warnings.Clear();
+        Log.Messages.Clear();
+        Log.Errors.Clear();
+        Report.Reset();
         LongEventHandler.Pending.Clear();
     }
 
@@ -578,6 +581,58 @@ public sealed class RuntimeLogicTests
         FixtureMod.Loader.LoadMissingIcon();
         Assert.That(MissingTextureReport.BuildReport(),
             Does.Contain("Fixture Mod (fixture.mod) at FixtureMod.Loader.LoadMissingIcon"));
+    }
+
+    /// The default level: problems reach the startup dialog exactly once, handled problems reach
+    /// the log only, and what fixes did stays out of the log.
+    [Test]
+    public void ImportantShowsEachProblemOnceAndKeepsNoticesInTheLog()
+    {
+        Report.Write(ReportKind.Problem, "guard missing");
+        Report.Write(ReportKind.Problem, "guard missing");
+        Report.Write(ReportKind.Notice, "untested version");
+        Report.Write(ReportKind.Info, "5 textures converted");
+
+        Assert.That(Report.TakePending(), Is.EqualTo(new[] { "guard missing" }));
+        Assert.That(Log.Warnings, Has.Count.EqualTo(3));
+        Assert.That(Log.Warnings, Has.All.StartWith(ModInfo.Tag));
+        Assert.That(Log.Messages, Is.Empty);
+    }
+
+    [Test]
+    public void QuietLogsOnlyGameBreakingProblemsAndShowsNothing()
+    {
+        ImageOptCompatMod.Settings.reportLevel = ReportLevel.Quiet;
+        Report.Write(ReportKind.Breaking, "black screen risk");
+        Report.Write(ReportKind.Problem, "guard missing");
+        Report.Write(ReportKind.Notice, "untested version");
+
+        Assert.That(Log.Errors, Has.Count.EqualTo(1));
+        Assert.That(Log.Warnings, Is.Empty);
+        Assert.That(Report.TakePending(), Is.Empty);
+    }
+
+    [Test]
+    public void EverythingAlsoLogsWhatEachFixDid()
+    {
+        ImageOptCompatMod.Settings.reportLevel = ReportLevel.Everything;
+        Report.Write(ReportKind.Info, "5 textures converted");
+        Assert.That(Log.Messages, Has.Count.EqualTo(1));
+        Assert.That(Report.TakePending(), Is.Empty);
+    }
+
+    /// Once the main menu is up, problems go straight to the in-game display, still once each.
+    [Test]
+    public void AfterLoadingProblemsGoToTheLiveDisplay()
+    {
+        var shown = new List<string>();
+        Report.LiveDisplay = shown.Add;
+        Report.Write(ReportKind.Problem, "late problem");
+        Report.Write(ReportKind.Problem, "late problem");
+
+        Assert.That(shown, Is.EqualTo(new[] { "late problem" }));
+        Assert.That(Report.TakePending(), Is.Empty);
+        Assert.That(Report.ShownCount, Is.EqualTo(1));
     }
 
     private static void OwnTestAssembly(string name, string packageId)

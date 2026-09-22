@@ -26,9 +26,13 @@ public sealed class ImageOptCompatMod : Mod
         Settings = GetSettings<ImageOptCompatSettings>();
 
         try { ImageOptActive = ModsConfig.IsActive("dev.soeur.imageopt"); }
-        catch (Exception e) { ImageOptActive = false; Log.Warning($"{ModInfo.Tag} could not query Image Opt: {e.Message}"); }
+        catch (Exception e) { ImageOptActive = false; Report.Write(ReportKind.Problem, $"could not query Image Opt: {e.Message}"); }
 
         var harmony = new Harmony("degradingant.imageoptcompat");
+
+        // Unconditional and first, so a problem found by anything below reaches the player: the
+        // main-menu status line and the one-time dialog, the way the Harmony mod shows its own.
+        MainMenuStatus.TryInstall(harmony);
 
         // Installed FIRST and UNCONDITIONALLY: these guard other mods' pre-load NullReferenceExceptions,
         // which are not Image Opt's doing. Anything that lengthens the load can trigger them.
@@ -52,7 +56,7 @@ public sealed class ImageOptCompatMod : Mod
 
         if (!ImageOptActive)
         {
-            Log.Message(ModInfo.Tag + " Image Opt is not active - Image Opt features stay off; "
+            Report.Write(ReportKind.Info, "Image Opt is not active - Image Opt features stay off; "
                       + "early-UI and null-texture guards remain.");
             return;
         }
@@ -61,7 +65,7 @@ public sealed class ImageOptCompatMod : Mod
         CheckFasterGameLoading();
         if (FglHasImageOptSupport == true) CheckFglSettings();
         CheckVersions();
-        Log.Message(ModInfo.Tag + " active alongside Image Opt.");
+        Report.Write(ReportKind.Info, "active alongside Image Opt.");
 
         // Sweep before textures are requested, so a stale file is never served.
         if (Settings.sweepOrphanZstd) OrphanSweep.Run();
@@ -76,14 +80,14 @@ public sealed class ImageOptCompatMod : Mod
     {
         bool fglActive;
         try { fglActive = ModsConfig.IsActive("Taranchuk.FasterGameLoading"); }
-        catch (Exception e) { Log.Warning($"{ModInfo.Tag} could not query Faster Game Loading: {e.Message}"); return; }
+        catch (Exception e) { Report.Write(ReportKind.Problem, $"could not query Faster Game Loading: {e.Message}"); return; }
 
         if (!fglActive) { FglHasImageOptSupport = null; return; }
 
         FglHasImageOptSupport = AccessTools.TypeByName("FasterGameLoading.ImageOptEarlyLoadCoordinator") != null;
         if (FglHasImageOptSupport == true) return;
 
-        Log.Warning(ModInfo.Tag + " Faster Game Loading is active but has no Image Opt compatibility layer. "
+        Report.Write(ReportKind.Breaking, "Faster Game Loading is active but has no Image Opt compatibility layer. "
                   + "Use 'Faster Game Loading - Continued (Preview)', or disable Faster Game Loading. "
                   + "Without it, Image Opt can black-screen during loading.");
     }
@@ -97,7 +101,7 @@ public sealed class ImageOptCompatMod : Mod
             AccessTools.TypeByName("FasterGameLoading.FasterGameLoadingSettings"));
         if (FglUntestedSettings == null) return;
 
-        Log.Warning($"{ModInfo.Tag} Faster Game Loading settings differ from the tested configuration or could not be checked "
+        Report.Write(ReportKind.Notice, $"Faster Game Loading settings differ from the tested configuration or could not be checked "
                   + $"({FglUntestedSettings}). This combination has not been tested with Image Opt. "
                   + "If loading misbehaves, reset Faster Game Loading's settings to default first.");
     }
@@ -123,7 +127,7 @@ public sealed class ImageOptCompatMod : Mod
         var notes = VersionCheck.BuildUntestedNotes(installed);
         UntestedVersions = notes.Count == 0 ? null : string.Join("; ", notes);
         foreach (var note in notes)
-            Log.Warning($"{ModInfo.Tag} {note}; it may still work, but an untested version can "
+            Report.Write(ReportKind.Notice, $"{note}; it may still work, but an untested version can "
           + "silently disable parts of this patch.");
     }
 
@@ -260,11 +264,29 @@ public sealed class ImageOptCompatMod : Mod
           + "stale textures otherwise. Plain .dds is never touched - mods legitimately ship those.");
         l.Gap();
 
-        l.CheckboxLabeled("Verbose logging", ref Settings.verbose,
-            "Log each fix even when it changed nothing. Useful when checking whether a fix is running at "
-          + "all; noisy otherwise.");
+        DrawReportLevel(l);
         l.GapLine();
         DrawDiagnosticToggles(l);
+    }
+
+    /// Three steps, worded after the log-level settings other mods in the pack already use
+    /// (RealRuins: errors only / warnings and errors / log everything). Takes effect immediately.
+    private static void DrawReportLevel(Listing_Standard l)
+    {
+        l.Label("Report level - how much this mod tells you");
+        if (l.RadioButton("Game-breaking problems only", Settings.reportLevel == ReportLevel.Quiet, 12f,
+                "Only problems that can stop the game loading or crash it, and only in the log. "
+              + "Nothing is shown on screen."))
+            Settings.reportLevel = ReportLevel.Quiet;
+        if (l.RadioButton("Important problems (default)", Settings.reportLevel == ReportLevel.Important, 12f,
+                "Game-breaking problems, and problems one of these settings can fix. They are shown on "
+              + "screen once after loading and written to the log. Problems in other mods that this mod "
+              + "already handled go to the log only."))
+            Settings.reportLevel = ReportLevel.Important;
+        if (l.RadioButton("Everything", Settings.reportLevel == ReportLevel.Everything, 12f,
+                "Also logs what each fix did: textures converted, paths repaired, sweep results. Useful "
+              + "when checking that a fix is running at all; noisy otherwise."))
+            Settings.reportLevel = ReportLevel.Everything;
     }
 
     /// Both cost measurable frame time, so both are off by default and say so.
@@ -293,7 +315,7 @@ public sealed class ImageOptCompatMod : Mod
     /// so the result survives even when the on-screen toast cannot be shown.
     private static void Notify(string message)
     {
-        Log.Message(ModInfo.Tag + " " + message);
+        Report.Requested(message);
 
         try
         {
@@ -370,7 +392,7 @@ public sealed class ImageOptCompatMod : Mod
             {
                 var scan = AssetRequesterScan.Report(MissingTextureReport.RecordedPaths());
                 GUIUtility.systemCopyBuffer = scan;
-                Log.Message(ModInfo.Tag + " asset owner scan:" + Environment.NewLine + scan);
+                Report.Requested("asset owner scan:" + Environment.NewLine + scan);
                 Notify("scan copied to the clipboard and written to the log.");
             }
         }

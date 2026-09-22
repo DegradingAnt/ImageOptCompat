@@ -60,7 +60,7 @@ internal static class FailedAudioClipGuard
 
             if (target == null)
             {
-                Log.Warning(ModInfo.Tag + " ResolvedGrain_Clip(AudioClip) was not found. "
+                Report.Write(ReportKind.Problem, "ResolvedGrain_Clip(AudioClip) was not found. "
                           + "The failed-audio guard is OFF, so a mod with an undecodable sound file can still "
                           + "crash the game in Unity's audio code.");
                 return;
@@ -72,7 +72,7 @@ internal static class FailedAudioClipGuard
         }
         catch (Exception e)
         {
-            Log.Warning($"{ModInfo.Tag} failed-audio guard could not be installed: {e.Message}");
+            Report.Write(ReportKind.Problem, $"failed-audio guard could not be installed: {e.Message}");
         }
     }
 
@@ -132,7 +132,7 @@ internal static class FailedAudioClipGuard
         // crash guard, not a reason to flood the log we just spent the session clearing.
         if (SuppressedPaths.Count >= MaxNamedPaths || !SuppressedPaths.Add(itemPath)) return;
 
-        Log.Warning($"{ModInfo.Tag} the sound file for '{itemPath}' failed to decode, so it is being "
+        Report.Write(ReportKind.Notice, $"the sound file for '{itemPath}' failed to decode, so it is being "
                   + "replaced with silence for sound grains. Reading its length may crash Unity's native audio "
                   + "code. The mod that ships this file needs to re-encode it as a standard PCM WAV or OGG.");
     }

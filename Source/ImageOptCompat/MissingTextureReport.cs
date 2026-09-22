@@ -72,7 +72,7 @@ internal static class MissingTextureReport
         }
         catch (Exception e)
         {
-            Log.Warning($"{ModInfo.Tag} missing-texture reporting could not be installed: {e.Message}");
+            Report.Write(ReportKind.Problem, $"missing-texture reporting could not be installed: {e.Message}");
         }
     }
 
@@ -259,14 +259,14 @@ internal static class MissingTextureReport
             if (RescuedPaths.Count < MaxPaths && RescuedPaths.Add(itemPath))
             {
                 if (RescuedPaths.Count == 1)
-                    Log.Message($"{ModInfo.Tag} repaired a texture path: '{itemPath}' does not exist, but "
+                    Report.Write(ReportKind.Hint, $"repaired a texture path: '{itemPath}' does not exist, but "
                               + $"'{corrected}' does. A mod built this path by scanning its texture folder and "
                               + "stripping one extension, which turns Image Opt's 'name.dds.zstd' cache file into "
                               + "'name.dds'. Left alone, the texture is null and Unity logs a warning on every "
                               + "frame it is drawn. Further repairs this session are counted, not logged: see "
                               + "the mod settings page for the total and the full list.");
-                else if (ImageOptCompatMod.Settings.verbose)
-                    Log.Message($"{ModInfo.Tag} repaired texture path '{itemPath}' -> '{corrected}'.");
+                else
+                    Report.Write(ReportKind.Info, $"repaired texture path '{itemPath}' -> '{corrected}'.");
             }
 
             return true;

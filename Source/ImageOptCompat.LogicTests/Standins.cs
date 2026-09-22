@@ -161,10 +161,12 @@ namespace Verse {
  public static class GenFilePaths { public const string TexturesFolder="Textures"; }
  public static class Log {
   public static Action<string>? ErrorObserver;
-  public static void Error(string text) => ErrorObserver?.Invoke(text);
+  public static List<string> Errors=new();
+  public static void Error(string text) { Errors.Add(text); ErrorObserver?.Invoke(text); }
   public static List<string> Warnings=new();
   public static void Warning(string message) => Warnings.Add(message);
-  public static void Message(string message) {}
+  public static List<string> Messages=new();
+  public static void Message(string message) => Messages.Add(message);
  }
 }
 namespace RuntimeAudioClipLoader {
@@ -177,7 +179,7 @@ namespace Verse.Sound {
  public class ResolvedGrain_Clip { public ResolvedGrain_Clip(UnityEngine.AudioClip clip) {} }
 }
 namespace ImageOptCompat {
- public sealed class Settings { public bool vehicleReadback=true,recompressCopies=true,genericPixelReadback=true,nullTextureGuard=true,fixDoubleExtensionPaths=true,guardFailedAudioClips=true; public bool verbose,destroyOriginalTexture,nullTextureShowPlaceholder,nullTextureDeepDiagnostic,reportMissingTextures; }
+ public sealed class Settings { public bool vehicleReadback=true,recompressCopies=true,genericPixelReadback=true,nullTextureGuard=true,fixDoubleExtensionPaths=true,guardFailedAudioClips=true; public ReportLevel reportLevel = ReportLevel.Important; public bool destroyOriginalTexture,nullTextureShowPlaceholder,nullTextureDeepDiagnostic,reportMissingTextures; }
  public static class ImageOptCompatMod { public static Settings Settings=new(); public static bool ImageOptActive=true; }
 }
 namespace ImageOpt { public static class Texture2DPatch { public static HashSet<int> NativeTextures=new(); } }

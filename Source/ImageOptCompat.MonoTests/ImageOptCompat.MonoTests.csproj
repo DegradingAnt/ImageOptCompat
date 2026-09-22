@@ -11,5 +11,8 @@
     <Compile Include="../ImageOptCompat/FailedAudioClipGuard.cs" Link="Actual/FailedAudioClipGuard.cs" />
     <Compile Include="../ImageOptCompat/ModAttribution.cs" Link="Actual/ModAttribution.cs" />
     <Compile Include="../ImageOptCompat/ModInfo.cs" Link="Actual/ModInfo.cs" />
+    <Compile Include="../ImageOptCompat/Report.cs" Link="Actual/Report.cs" />
+    <Compile Include="../ImageOptCompat/ReportLevel.cs" Link="Actual/ReportLevel.cs" />
+    <Compile Include="../ImageOptCompat/ReportKind.cs" Link="Actual/ReportKind.cs" />
   </ItemGroup>
 </Project>

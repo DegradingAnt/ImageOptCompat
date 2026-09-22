@@ -67,7 +67,7 @@ internal static class ModAttribution
         catch (Exception e)
         {
             // Attribution is a convenience. Losing it must not cost the caller its report.
-            Log.Warning($"{ModInfo.Tag} could not build the mod attribution map: {e.Message}");
+            Report.Write(ReportKind.Notice, $"could not build the mod attribution map: {e.Message}");
         }
 
         var map = new Dictionary<Assembly, string>(claims.Count);

@@ -47,7 +47,7 @@ internal static class EarlyUiGuards
             () => { worldbuilderSettingsField = FieldOn("Worldbuilder.WorldbuilderMod", "settings"); return worldbuilderSettingsField != null; });
 
         if (InstalledCount > 0)
-            Log.Message($"{ModInfo.Tag} early-UI guards installed: {InstalledCount}");
+            Report.Write(ReportKind.Info, $"early-UI guards installed: {InstalledCount}");
     }
 
     private static FieldInfo? FieldOn(string typeName, string fieldName)
@@ -73,7 +73,7 @@ internal static class EarlyUiGuards
         catch (Exception e)
         {
             // Fail OPEN: a guard that cannot install must never stop the game loading.
-            Log.Warning($"{ModInfo.Tag} could not guard {typeName}.{methodName}: {e.Message}");
+            Report.Write(ReportKind.Problem, $"could not guard {typeName}.{methodName}: {e.Message}");
         }
     }
 
