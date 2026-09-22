@@ -78,6 +78,12 @@ FIXES THAT WORK WITHOUT IMAGE OPT
 These are not Image Opt faults. They stay on even when Image Opt is inactive, and each can be switched off in the mod settings.
 - Failed-audio guard - checks both Unity and RimWorld's decoder state before a sound grain reads a failed clip's length. Failed clips use one reusable silent clip, including folder and custom grains; Loading and Unloaded clips are preserved.
 - Null-texture guard - Unity writes "null texture passed to GUI.DrawTexture" every time a mod hands it a missing or destroyed texture. Unity writes that line itself, so the game's own repeat-message filter never sees it and it is written once per call, every frame, for the whole session. On a 1,484-mod load it was measured at 222,128 lines in one session, which is 94 percent of the entire log. Drawing and ticking share one thread, so the cost comes out of tick rate and appears as stutter and low TPS above 1x speed, while 1x looks fine. The patch skips invalid repaint draws by default, preserving the empty appearance even when alpha blending is disabled. It samples the first eight intercepted draws and, for each, names the nearest mod on the call stack, looking through Harmony-patched methods. When no single mod can be named, it says so. An optional magenta placeholder makes missing textures visible, and an opt-in deep diagnostic collects per-caller counts.
+- Sound file loading repair - many audio editors save WAV files with an "extensible" header that RimWorld's decoder rejects, so the sound stays silent. This reads them as the plain PCM they are, in memory only, and lets the game log the real reason when a sound truly cannot be decoded.
+
+IT TELLS YOU WHAT IS HAPPENING
+- Startup check - while the game loads, it checks that every enabled fix is in place, that mod names in reports will be right, and that the versions are the tested ones. The result shows in the main-menu corner, like Harmony's version line; hover over it for the list.
+- Repeated-error finder - names the mod whose code throws the same error over and over, even when the log only shows "Duplicate stacktrace".
+- Report level - choose how much the mod tells you. By default: problems that can break the game, and problems one of its settings can fix, shown once after loading.
 
 ALSO PATCHES THESE OTHER MODS
 Each is only touched if it is installed. If it is not, that part does nothing.
@@ -90,6 +96,7 @@ KNOWN GAPS - please read
 - A mod calling the five-argument GetPixels overload directly is not covered - that one method is native and cannot be patched. The standard overloads are.
 - Null-draw reports name the nearest mod on the call stack. That is usually the mod to report to, but a missing texture can also come from elsewhere, such as a def that another mod supplied.
 - No TPS figure has been measured. In a two-hour session on the same list, Unity logged 0 null-texture warnings. The session that found the flood logged 222,128.
+- The report level, startup check, sound repair and repeated-error finder are new in this version. Tests cover them, including the game's own sound decoder, but they have not yet been through a full boot.
 - Automated tests cannot run Unity's native rendering or audio. They use stand-ins, check patch signatures against the installed game, and run real Harmony patches on RimWorld's own Mono runtime.
 
 I used AI tools during development, then checked the changes against the source and tests. MIT licensed; fixes welcome.

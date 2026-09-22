@@ -26,7 +26,7 @@ of about two hours. See "Measured results" in the README.
 - **Startup check.** While the game loads, the mod checks that every enabled fix is actually in
   place, and that Harmony-patched methods resolve so reports name the right mod. It also checks
   that the Faster Game Loading build, its settings and the mod versions are the tested ones. The
-  main-menu status line shows the result, for example "all 9 startup checks passed", and hovering
+  main-menu status line shows the result, for example "all 11 startup checks passed", and hovering
   over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
   Progress shows it too. The same list opens the diagnostic report and heads the settings page.
 - **Repeated-error finder.** When the same error keeps repeating, the mod names the mod whose code
@@ -90,8 +90,11 @@ of about two hours. See "Measured results" in the README.
   game's assembly. 50 mod folders in the test install do.
 
 ### Release checks
-- 125 unit and contract tests, 52 logic tests, and the 30-check regression runner, which executes
-  real Harmony patches on the installed game's Mono runtime. The Release build has no warnings.
+- 159 unit and contract tests, 70 logic tests, and the regression runner. The runner has 32 checks
+  with real Harmony patches on the installed game's Mono runtime, and it runs the game's own sound
+  decoder on a real file. The Release build has no warnings.
+- The report level, startup check, sound repair and repeated-error finder were added after the
+  boot test. They are covered by the checks above but have not yet been through a full boot.
 
 ## [0.2.0] - 2026-09-21
 

@@ -24,10 +24,18 @@ Made for [b]RimWorld 1.6 on Windows[/b].
 [*]Loading-screen errors from Vanilla Expanded Framework and Worldbuilder trying to use data before it is ready.
 [*]Missing textures caused by mods picking up Image Opt's cache files when scanning their texture folders. Holograms and Projectors is one example.
 [*]Repeated "null texture passed to GUI.DrawTexture" warnings. Missing textures stay invisible by default, with an optional magenta marker to help find them.
+[*]Sound files the game rejects. Many audio editors save WAV files with an "extensible" header that RimWorld's decoder refuses, so the sound stays silent. The patch reads them as the plain PCM they are, in memory only.
 [*]Sound files the game fails to decode. Reading such a clip's length can crash Unity's audio code, so it plays as silence instead. This works with or without Image Opt.
 [/list]
 
 It also cleans up leftover Image Opt caches when their source images are gone. Plain .dds files are left alone.
+
+[h1]It tells you what is happening[/h1]
+[list]
+[*][b]Startup check.[/b] While the game loads, it checks that every enabled fix is in place and that the versions are the tested ones. The result shows in the main-menu corner, like Harmony's version line. Hover over it for the list.
+[*][b]Repeated-error finder.[/b] It names the mod whose code throws the same error over and over, even when the log only shows "Duplicate stacktrace".
+[*][b]Report level.[/b] Choose how much the mod tells you. By default you see only problems that can break the game, and problems one of its settings can fix, once after loading.
+[/list]
 
 [h1]Settings and troubleshooting[/h1]
 Every fix has its own switch. If something looks wrong, you can turn fixes off individually to narrow it down. Some changes need a restart; the settings explain which ones.
@@ -62,6 +70,8 @@ Missing-texture recording is off by default and excludes optional existence chec
 [b]Versions and testing[/b]
 Checked against RimWorld 1.6.4871, Harmony 2.4.2, Image Opt 0.1.13 and Faster Game Loading Preview 2026.09.07.1 with FGL's default settings. FGL's regular and Preview builds share a package ID, so the patch checks for the loading coordinator itself.
 
-The Release build passes 177 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate 30-check runner executes real Harmony patches on RimWorld's own Mono runtime. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
+The Release build passes 229 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate runner executes real Harmony patches on RimWorld's own Mono runtime, and runs the game's own sound decoder on a real file. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
 
-That boot ran the full Progression pack (about 1,485 mods) for a session of about two hours. It logged 0 null-texture warnings, where the session that found the flood logged 222,128. No TPS improvement has been measured, and results will depend on what is slowing down your game.
+The report level, startup check, sound repair and repeated-error finder came after that boot. Tests cover them, but they have not yet been through a full boot.
+
+The boot ran the full Progression pack (about 1,485 mods) for a session of about two hours. It logged 0 null-texture warnings, where the session that found the flood logged 222,128. No TPS improvement has been measured, and results will depend on what is slowing down your game.
