@@ -33,7 +33,7 @@ It also cleans up leftover Image Opt caches when their source images are gone. P
 [h1]It tells you what is happening[/h1]
 [list]
 [*][b]Startup check.[/b] While the game loads, it checks that every enabled fix is in place and that the versions are the tested ones. The result shows in the main-menu corner, like Harmony's version line. Hover over it for the list.
-[*][b]Repeated-error finder.[/b] It names the mod whose code throws the same error over and over, even when the log only shows "Duplicate stacktrace".
+[*][b]Repeated-error finder.[/b] It names the mod whose code throws the same error over and over, even when the log only shows "Duplicate stacktrace", and including errors a mod catches and logs itself.
 [*][b]Report level.[/b] Choose how much the mod tells you. By default you see only problems that can break the game, and problems one of its settings can fix, once after loading.
 [/list]
 
@@ -70,7 +70,7 @@ Missing-texture recording is off by default and excludes optional existence chec
 [b]Versions and testing[/b]
 Checked against RimWorld 1.6.4871, Harmony 2.4.2, Image Opt 0.1.13 and Faster Game Loading Preview 2026.09.07.1 with FGL's default settings. FGL's regular and Preview builds share a package ID, so the patch checks for the loading coordinator itself.
 
-The Release build passes 229 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate runner executes real Harmony patches on RimWorld's own Mono runtime, and runs the game's own sound decoder on a real file. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
+The Release build passes 251 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate runner executes real Harmony patches on RimWorld's own Mono runtime, and runs the game's own sound decoder on a real file. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
 
 The report level, startup check, sound repair and repeated-error finder came after that boot. Tests cover them, but they have not yet been through a full boot.
 

@@ -82,7 +82,7 @@ These are not Image Opt faults. They stay on even when Image Opt is inactive, an
 
 IT TELLS YOU WHAT IS HAPPENING
 - Startup check - while the game loads, it checks that every enabled fix is in place, that mod names in reports will be right, and that the versions are the tested ones. The result shows in the main-menu corner, like Harmony's version line; hover over it for the list.
-- Repeated-error finder - names the mod whose code throws the same error over and over, even when the log only shows "Duplicate stacktrace".
+- Repeated-error finder - names the mod whose code throws the same error over and over, even when the log only shows "Duplicate stacktrace", and including errors a mod catches and logs itself.
 - Report level - choose how much the mod tells you. By default: problems that can break the game, and problems one of its settings can fix, shown once after loading.
 
 ALSO PATCHES THESE OTHER MODS

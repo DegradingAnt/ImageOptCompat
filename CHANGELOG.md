@@ -24,16 +24,20 @@ of about two hours. See "Measured results" in the README.
   corner says whether the mod found problems. Hover over it for details. Problems found while
   loading are shown once, together, in one dialog.
 - **Startup check.** While the game loads, the mod checks that every enabled fix is actually in
-  place, and that Harmony-patched methods resolve so reports name the right mod. It also checks
-  that the Faster Game Loading build, its settings and the mod versions are the tested ones. The
-  main-menu status line shows the result, for example "all 11 startup checks passed", and hovering
-  over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
+  place, by asking Harmony which of its hooks are live, and that Harmony-patched methods resolve so
+  reports name the right mod. It also checks that the Faster Game Loading build, its settings and
+  the mod versions are the tested ones. A check that could not run shows as failed, never as
+  passed. The main-menu status line shows the result, for example "all 12 startup checks passed",
+  and hovering over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
   Progress shows it too. The same list opens the diagnostic report and heads the settings page.
 - **Repeated-error finder.** When the same error keeps repeating, the mod names the mod whose code
   throws it. That is a notice in the log after 100 repeats, and once on screen after 1,000. It reads
   the error itself, so it works even when the log only says "Duplicate stacktrace". The test pack
-  logged one error 4,478 times that way, and nothing named its source. It only runs while an error is
-  being logged, lists every repeating error in the diagnostic report, and has its own switch.
+  logged one error 4,478 times that way, and nothing named its source. It sees the errors Unity logs
+  and the ones mods catch and log themselves, and it tells two mods failing in one shared game
+  method apart. When no mod's code is on an error's stack, it lists the mods whose patches the
+  error passed through. It only runs while an error is being written out, lists every repeating
+  error in the diagnostic report, and has its own switch.
 - **Sound file loading repair.** Many audio editors save WAV files with an "extensible" header,
   even for ordinary 16-bit stereo sound. RimWorld's decoder rejects that header, the sound stays
   silent, and the log shows a misleading "Value cannot be null" error. The mod now reads such files
@@ -88,11 +92,16 @@ of about two hours. See "Measured results" in the README.
   Worldbuilder changes the method or field they guard. That is now reported.
 - Reports keep calling RimWorld's own code "RimWorld (core)" even when mods ship copies of the
   game's assembly. 50 mod folders in the test install do.
+- One Image Opt fix failing to install no longer takes the others with it. They were installed in
+  one step that stopped at the first failure and skipped the Faster Game Loading and version checks
+  after it. Each now installs on its own, and a failure names the part that is off.
 
 ### Release checks
-- 159 unit and contract tests, 70 logic tests, and the regression runner. The runner has 32 checks
+- 168 unit and contract tests, 83 logic tests, and the regression runner. The runner has 47 checks
   with real Harmony patches on the installed game's Mono runtime, and it runs the game's own sound
   decoder on a real file. The Release build has no warnings.
+- A review before release found four defects in the new startup check, error finder and sound
+  repair. All four are fixed, and each has a test that fails on the old code.
 - The report level, startup check, sound repair and repeated-error finder were added after the
   boot test. They are covered by the checks above but have not yet been through a full boot.
 
