@@ -87,10 +87,23 @@ public class ModMetadataTests
         Assert.That(ProductionSource("ImageOptCompatMod.cs"), Does.Contain("SettingsCategory() => ModInfo.Name;"));
 
     [Test]
-    public void HarmonyIdIsThePackageId()
+    public void HarmonyIdIsThePackageId() =>
+        Assert.That(ModInfo.HarmonyId, Is.EqualTo(About().Element("packageId")!.Value));
+
+    /// The startup check asks Harmony which patches are live under ModInfo.HarmonyId. A Harmony
+    /// instance made with any other id would install patches that check cannot see.
+    [Test]
+    public void EveryHarmonyInstanceUsesTheId()
     {
-        var packageId = About().Element("packageId")!.Value;
-        Assert.That(ProductionSource("ImageOptCompatMod.cs"), Does.Contain($"new Harmony(\"{packageId}\")"));
+        var offenders = Directory.GetFiles(Path.Combine(RepoRoot(), "Source", "ImageOptCompat"), "*.cs")
+            .SelectMany(file => File.ReadLines(file).Select((line, i) => (file, line, number: i + 1)))
+            .Where(x => !x.line.TrimStart().StartsWith("//", StringComparison.Ordinal)
+                     && x.line.Contains("new Harmony(", StringComparison.Ordinal)
+                     && !x.line.Contains("new Harmony(ModInfo.HarmonyId)", StringComparison.Ordinal))
+            .Select(x => $"{Path.GetFileName(x.file)}:{x.number}")
+            .ToList();
+
+        Assert.That(offenders, Is.Empty);
     }
 
     /// About.xml tells players which versions were tested, and VersionCheck warns about any other.

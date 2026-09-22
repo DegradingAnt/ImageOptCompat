@@ -79,15 +79,32 @@ internal static class Report
 
         if (!OnScreen(level, kind)) return;
 
+        Action<string>? live;
         lock (Pending)
         {
             // Once per distinct message: a problem that recurs every frame must not recur on screen.
             if (!Shown.Add(text)) return;
             ShownInOrder.Add(text);
 
-            // The live display draws UI, which is main-thread only. Off-thread, the log line stands.
-            if (LiveDisplay == null) Pending.Add(text);
-            else if (UnityData.IsInMainThread) LiveDisplay(text);
+            live = LiveDisplay;
+            if (live == null)
+            {
+                Pending.Add(text);
+                return;
+            }
+        }
+
+        // The live display draws UI, which is main-thread only. Off-thread, the log line stands.
+        // It runs outside the lock, and it may not throw into whatever reported the problem: that
+        // can be a pixel read or an error being written out, deep inside another mod's call.
+        if (!UnityData.IsInMainThread) return;
+        try
+        {
+            live(text);
+        }
+        catch (Exception)
+        {
+            // The log line above already carries the message.
         }
     }
 

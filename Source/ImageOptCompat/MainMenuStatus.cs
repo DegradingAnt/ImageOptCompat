@@ -108,15 +108,23 @@ internal static class MainMenuStatus
 
         var oldFont = Text.Font;
         var oldColor = GUI.color;
-        Text.Font = GameFont.Small;
-        GUI.color = (problems == 0 ? Color.white : new Color(1f, 0.8f, 0.4f)).ToTransparent(0.5f);
+        Rect rect;
+        try
+        {
+            Text.Font = GameFont.Small;
+            GUI.color = (problems == 0 ? Color.white : new Color(1f, 0.8f, 0.4f)).ToTransparent(0.5f);
 
-        if (rebuild) cachedSize = Text.CalcSize(cachedLabel);
-        var rect = new Rect(Left, Top, cachedSize.x, cachedSize.y);
-        Widgets.Label(rect, cachedLabel);
-
-        GUI.color = oldColor;
-        Text.Font = oldFont;
+            if (rebuild) cachedSize = Text.CalcSize(cachedLabel);
+            rect = new Rect(Left, Top, cachedSize.x, cachedSize.y);
+            Widgets.Label(rect, cachedLabel);
+        }
+        finally
+        {
+            // Postfix swallows exceptions so the menu survives one. Without this, a failure
+            // above would leave the rest of the menu drawing in faded half-transparent white.
+            GUI.color = oldColor;
+            Text.Font = oldFont;
+        }
 
         if (!Mouse.IsOver(rect)) return;
         Widgets.DrawHighlight(rect);

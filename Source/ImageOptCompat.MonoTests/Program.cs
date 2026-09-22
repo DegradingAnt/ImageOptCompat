@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using HarmonyLib;
 using ImageOptCompat;
@@ -47,6 +48,9 @@ internal static class Program
             CheckTextures();
             CheckAudio();
             CheckAttribution(h);
+            CheckPatchAudit();
+            // Last: once installed, the finder sees every exception this process turns into text.
+            CheckRepeatedErrorFinder(h);
             Console.WriteLine("All " + checks + " Mono/Harmony checks passed.");
             return 0;
         }
@@ -161,6 +165,134 @@ internal static class Program
         Check(leftover == null || leftover.Prefixes.Count == 0, "startup self-test removes its own patch");
     }
 
+    /// The startup check's audit, on real Harmony. Codex's review 4 found the readback check passing
+    /// with no hook installed at all. The audit must count only patches live under our own id, and
+    /// must see them go when they are removed.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CheckPatchAudit()
+    {
+        const string owner = "imageoptcompat.mono.audit";
+        var audit = new Harmony(owner);
+        var classes = PatchAudit.PatchClassesIn(typeof(ImageOptCompat.AuditFixture.Hooks));
+        Check(classes.Count == 2, "the audit finds a container's patch classes the way PatchAll does");
+        Check(PatchAudit.LiveCount(owner, classes) == 0, "no hook reads as live before anything is patched");
+
+        audit.CreateClassProcessor(typeof(ImageOptCompat.AuditFixture.Hooks.OnFirst)).Patch();
+        Check(PatchAudit.LiveCount(owner, classes) == 1, "one installed class of two reads as one live hook");
+
+        var second = AccessTools.Method(typeof(ImageOptCompat.AuditFixture.Targets), nameof(ImageOptCompat.AuditFixture.Targets.Second));
+        new Harmony("another.mod").Patch(second, prefix: new HarmonyMethod(typeof(ImageOptCompat.AuditFixture.OtherMod), nameof(ImageOptCompat.AuditFixture.OtherMod.Prefix)));
+        Check(!PatchAudit.IsLive(owner, typeof(ImageOptCompat.AuditFixture.Hooks.OnSecond)),
+            "another mod's patch on the same target does not count as ours");
+
+        audit.CreateClassProcessor(typeof(ImageOptCompat.AuditFixture.Hooks.OnSecond)).Patch();
+        Check(PatchAudit.LiveCount(owner, classes) == 2, "both hooks read as live once both are installed");
+
+        audit.UnpatchAll(owner);
+        Check(PatchAudit.LiveCount(owner, classes) == 0, "removed hooks no longer read as live");
+        Check(Harmony.GetPatchInfo(second)?.Prefixes.Count == 1, "the other mod's patch is untouched");
+    }
+
+    /// The repeated-error finder on the game's own runtime and Harmony. Codex's review 4 found two
+    /// faults: an error logged the RimWorld way, "Log.Error(... + ex)", never reached the finder, and
+    /// two mods failing in one shared helper were counted as one, blamed on whichever came first.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CheckRepeatedErrorFinder(Harmony h)
+    {
+        RepeatedErrorFinder.TryInstall(h);
+        Check(RepeatedErrorFinder.Installed, "the finder hooks the runtime's stack-trace method");
+
+        var helper = DynamicMethodIn("FixtureGame", "FixtureGame.Helper", callee: null);
+        var modA = DynamicMethodIn("ModA", "ModA.Caller", helper);
+        var modB = DynamicMethodIn("ModB", "ModB.Caller", helper);
+        foreach (var (name, method) in new[] { ("ModA", modA), ("ModB", modB) })
+        {
+            var pack = new ModContentPack { Name = name, PackageId = name.ToLowerInvariant() };
+            pack.assemblies.loadedAssemblies.Add(method.DeclaringType!.Assembly);
+            LoadedModManager.RunningMods.Add(pack);
+        }
+
+        ModAttribution.Reset();
+        RepeatedErrorFinder.Reset();
+
+        // The RimWorld way, as Verse.Root.Update writes it: caught, then concatenated into the text.
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++)
+            Log.Error("Root level exception in Update(): " + ExceptionFrom(modB));
+        var row = RepeatedErrorFinder.Snapshot().Single();
+        Check(row.Count == 100 && row.Owner == "ModB (modb)" && row.Site == "ModB.Caller.Run" && row.ThrownIn == "FixtureGame.Helper.Run",
+            $"errors caught and logged the RimWorld way are counted: {row.Count} from {row.Owner} at {row.Site}, thrown in {row.ThrownIn}");
+        Check(Log.Warnings.Any(w => w.Contains("ModB (modb) has thrown the same InvalidOperationException 100 times")),
+            "the notice names the mod");
+
+        // Unity's formatter reads ex.StackTrace several times; an outer exception's text includes the inner one's.
+        var once = ExceptionFrom(modB);
+        _ = once.StackTrace;
+        _ = once.StackTrace;
+        _ = once.ToString();
+        _ = new InvalidOperationException("outer", once).ToString();
+        Check(RepeatedErrorFinder.Snapshot().Single().Count == 101, "one exception is one occurrence, however often its text is read");
+
+        // In game, the Harmony mod's prefix replaces the text and skips the original. The postfix
+        // must still run: that is the arrangement behind every "Duplicate stacktrace" line.
+        var getStackTrace = AccessTools.Method(typeof(Environment), "GetStackTrace", new[] { typeof(Exception), typeof(bool) });
+        var harmonyMod = new Harmony("net.pardeike.rimworld.lib.harmony");
+        harmonyMod.Patch(getStackTrace, prefix: new HarmonyMethod(typeof(ImageOptCompat.Probe.HarmonyModStandIn), nameof(ImageOptCompat.Probe.HarmonyModStandIn.Prefix)));
+        var text = ExceptionFrom(modB).ToString();
+        harmonyMod.UnpatchAll(harmonyMod.Id);
+        Check(text.Contains("Duplicate stacktrace") && RepeatedErrorFinder.Snapshot().Single().Count == 102,
+            "behind a prefix that skips the original, as the Harmony mod's does, the error is still counted");
+
+        RepeatedErrorFinder.Reset();
+        _ = ExceptionFrom(modA).ToString();
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) _ = ExceptionFrom(modB).ToString();
+        var rows = RepeatedErrorFinder.Snapshot();
+        Check(rows.Count == 2 && rows[0].Owner == "ModB (modb)" && rows[0].Count == 100 && rows[1].Owner == "ModA (moda)" && rows[1].Count == 1,
+            "two mods failing in one shared helper are two errors, each named for its own mod");
+
+        _ = Environment.StackTrace;
+        Check(RepeatedErrorFinder.Snapshot().Sum(r => r.Count) == 101, "a stack trace asked for without an exception is not an error");
+
+        // No mod frame at all: a game method that a mod patched. The notice names who patched it.
+        RepeatedErrorFinder.Reset();
+        var toInt = AccessTools.Method(typeof(Convert), nameof(Convert.ToInt32), new[] { typeof(string) });
+        h.Patch(toInt, prefix: new HarmonyMethod(typeof(FixtureMod.Patches), nameof(FixtureMod.Patches.ToInt32Prefix)));
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) _ = ExceptionFrom(toInt, "not a number").ToString();
+        h.Unpatch(toInt, HarmonyPatchType.Prefix, h.Id);
+        Check(Log.Warnings.Any(w => w.Contains("No single mod's code is on its stack") && w.Contains("carry patches from Fixture Mod (fixture.mod)")),
+            "an error through patched game code names the mods whose patches it passed through");
+    }
+
+    /// A method in an assembly of its own, the way each mod's code lives in its own DLL. It calls
+    /// `callee`, or throws when there is none.
+    private static MethodInfo DynamicMethodIn(string assemblyName, string typeName, MethodInfo? callee)
+    {
+        var assembly = AppDomain.CurrentDomain.DefineDynamicAssembly(new AssemblyName(assemblyName), AssemblyBuilderAccess.Run);
+        var type = assembly.DefineDynamicModule(assemblyName).DefineType(typeName, TypeAttributes.Public);
+        var method = type.DefineMethod("Run", MethodAttributes.Public | MethodAttributes.Static, typeof(void), Type.EmptyTypes);
+        method.SetImplementationFlags(MethodImplAttributes.NoInlining);
+        var il = method.GetILGenerator();
+        if (callee == null)
+        {
+            il.Emit(OpCodes.Ldstr, "shared helper failed");
+            il.Emit(OpCodes.Newobj, typeof(InvalidOperationException).GetConstructor(new[] { typeof(string) })!);
+            il.Emit(OpCodes.Throw);
+        }
+        else
+        {
+            il.Emit(OpCodes.Call, callee);
+            il.Emit(OpCodes.Ret);
+        }
+
+        return type.CreateType()!.GetMethod("Run")!;
+    }
+
+    private static Exception ExceptionFrom(MethodInfo method, params object[] args)
+    {
+        try { method.Invoke(null, args); }
+        catch (TargetInvocationException e) { return e.InnerException!; }
+        throw new InvalidOperationException("the fixture did not throw");
+    }
+
     /// End to end against the GAME's decoder, not a stand-in: load the installed Assembly-CSharp,
     /// give its CustomAudioFileReader the file that failed in boot 2, then the rewritten copy.
     /// The first must fail (the bug, reproduced) and the second must decode with the same format.
@@ -210,8 +342,41 @@ internal static class Program
     }
 }
 
+namespace ImageOptCompat.AuditFixture
+{
+    public static class Targets
+    {
+        [MethodImpl(MethodImplOptions.NoInlining)] public static int First(int value) => value + 1;
+        [MethodImpl(MethodImplOptions.NoInlining)] public static int Second(int value) => value + 2;
+    }
+
+    /// Shaped like Texture2DReadPatches: patch classes nested in a container. One names its target
+    /// without argument types, the other with them, so both ways of resolving a target run.
+    public static class Hooks
+    {
+        [HarmonyPatch(typeof(Targets), nameof(Targets.First))]
+        public static class OnFirst { public static void Prefix() { } }
+
+        [HarmonyPatch(typeof(Targets), nameof(Targets.Second), typeof(int))]
+        public static class OnSecond { public static void Postfix() { } }
+    }
+
+    public static class OtherMod { public static void Prefix() { } }
+}
+
 namespace ImageOptCompat.Probe
 {
+    /// Does what the Harmony mod's prefix on the same method does once a trace has been seen:
+    /// replaces the text and skips the original.
+    public static class HarmonyModStandIn
+    {
+        public static bool Prefix(Exception e, bool needFileInfo, ref string __result)
+        {
+            __result = "[Ref 0] Duplicate stacktrace, see ref for original";
+            return false;
+        }
+    }
+
     /// A Harmony prefix standing where production's null-texture prefix stands. It lives under the
     /// ImageOptCompat namespace so the walk treats it as plumbing, exactly as it treats ours.
     public static class AttributionProbe

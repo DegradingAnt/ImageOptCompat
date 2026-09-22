@@ -107,22 +107,36 @@ public class UnityApiContractTests
           + "Re-check which overload holds the null check before trusting NullTextureGuard.");
     }
 
+    // ---- RepeatedErrorFinder's contract -------------------------------------------------------
+
+    /// The finder postfixes the one method every exception passes through on its way to text: Unity's
+    /// formatter and a RimWorld "Log.Error(... + ex)" both read ex.StackTrace, which calls it. It is
+    /// internal to the game's own Mono corlib, so only this metadata can say it is still there, still
+    /// static, and still names its exception "e", the name the postfix binds.
+    [Test]
+    public void TheRuntimeTurnsExceptionsIntoTextThroughTheMethodTheFinderPatches()
+    {
+        var environment = GetType("mscorlib.dll", "System.Environment");
+        var method = Overloads(environment, "GetStackTrace").SingleOrDefault(m =>
+            m.GetParameters().Select(p => p.ParameterType.FullName).SequenceEqual(new[] { "System.Exception", "System.Boolean" }));
+
+        Assert.That(method, Is.Not.Null, "System.Environment.GetStackTrace(Exception, bool) is gone from the game's corlib.");
+        Assert.That(method!.IsStatic, Is.True);
+        Assert.That(method.GetParameters().Select(p => p.Name), Is.EqualTo(new[] { "e", "needFileInfo" }));
+
+        var exception = GetType("mscorlib.dll", "System.Exception");
+        Assert.That(exception.GetProperty("StackTrace"), Is.Not.Null);
+        Assert.That(Overloads(exception, "GetStackTrace").Any(m => m.GetParameters().Length == 1), Is.True,
+            "Exception.GetStackTrace(bool), the step between ex.StackTrace and the runtime method, is gone.");
+
+        var mod = _context!.LoadFromAssemblyPath(typeof(WavHeaderFix).Assembly.Location);
+        var postfix = mod.GetType("ImageOptCompat.RepeatedErrorFinder")!.GetMethod("Postfix", BindingFlags.NonPublic | BindingFlags.Static)!;
+        AudioApiContractTests.AssertBindsTo(postfix, method);
+    }
+
     // ---- Texture2DReadPatches' contract ----------------------------------------------------
 
     /// The inconsistency that already caught us once: Unity spells it `miplevel` here...
-    /// RepeatedErrorFinder binds Unity's parameter BY NAME, and Unity spells it "exceptiono". A
-    /// postfix written with the obvious name would bind nothing and find nothing, silently.
-    [Test]
-    public void UnityFormatsExceptionsThroughTheMethodTheFinderPatches()
-    {
-        var utility = GetType("UnityEngine.CoreModule.dll", "UnityEngine.StackTraceUtility");
-        var method = utility.GetMethod("ExtractStringFromExceptionInternal",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-        Assert.That(method, Is.Not.Null);
-        Assert.That(method!.GetParameters()[0].Name, Is.EqualTo("exceptiono"));
-        Assert.That(method.GetParameters()[0].ParameterType.FullName, Is.EqualTo("System.Object"));
-    }
-
     [Test]
     public void GetPixelsSpellsTheMipArgumentLowercase()
     {

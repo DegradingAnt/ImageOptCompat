@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using System.Reflection.Emit;
 using ImageOptCompat;
 using NUnit.Framework;
 using UnityEngine;
@@ -54,6 +55,7 @@ public sealed class RuntimeLogicTests
         Log.Errors.Clear();
         Report.Reset();
         RepeatedErrorFinder.Reset();
+        HarmonyLib.Harmony.PatchInfo.Clear();
         LongEventHandler.Pending.Clear();
     }
 
@@ -649,6 +651,18 @@ public sealed class RuntimeLogicTests
         Assert.That(Report.ShownCount, Is.EqualTo(1));
     }
 
+    /// The live display draws UI. If it throws, the problem must still be in the log, and whatever
+    /// reported it, which can be a pixel read inside another mod's call, must not get the exception.
+    [Test]
+    public void AFailingLiveDisplayDoesNotThrowIntoTheReporter()
+    {
+        Report.LiveDisplay = _ => throw new InvalidOperationException("no message drawer yet");
+
+        Assert.DoesNotThrow(() => Report.Write(ReportKind.Problem, "late problem"));
+        Assert.That(Log.Warnings.Single(), Does.Contain("late problem"));
+        Assert.That(Report.ShownCount, Is.EqualTo(1));
+    }
+
     private static Exception CrashInFixtureMod()
     {
         try { FixtureMod.Loader.Crash(null); }
@@ -657,24 +671,95 @@ public sealed class RuntimeLogicTests
     }
 
     /// Boot 2 logged the same NullReferenceException 4,478 times with no stack trace. The finder
-    /// reads the exception object itself, so it names the mod even then.
+    /// reads each exception object itself, so it names the mod even then. Every repeat is a new
+    /// exception, as it is in the game.
     [Test]
     public void ARepeatingErrorIsTracedToTheModThatThrowsIt()
     {
         OwnTestAssembly("Fixture Mod", "fixture.mod");
-        var error = CrashInFixtureMod();
-        for (var i = 1; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(error);
+        for (var i = 1; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(CrashInFixtureMod());
         Assert.That(Log.Warnings, Is.Empty, "quiet below the notice threshold");
 
-        RepeatedErrorFinder.Observe(error);
+        RepeatedErrorFinder.Observe(CrashInFixtureMod());
         Assert.That(Log.Warnings, Has.Count.EqualTo(1));
         Assert.That(Log.Warnings[0], Does.Contain("Fixture Mod (fixture.mod) has thrown the same NullReferenceException 100 times")
                                   .And.Contain("FixtureMod.Loader.Crash"));
         Assert.That(Report.TakePending(), Is.Empty, "a notice stays in the log");
 
-        for (var i = RepeatedErrorFinder.NoticeAt; i < RepeatedErrorFinder.ProblemAt; i++) RepeatedErrorFinder.Observe(error);
+        for (var i = RepeatedErrorFinder.NoticeAt; i < RepeatedErrorFinder.ProblemAt; i++) RepeatedErrorFinder.Observe(CrashInFixtureMod());
         Assert.That(Report.TakePending().Single(), Does.Contain("1000 times"), "shown on screen once at 1,000");
         Assert.That(RepeatedErrorFinder.Snapshot().Single().Count, Is.EqualTo(RepeatedErrorFinder.ProblemAt));
+    }
+
+    /// Unity's formatter reads an exception's text three times, and an outer exception's text
+    /// includes its inner one's. However often it is read, one exception is one occurrence.
+    [Test]
+    public void OneExceptionIsCountedOnceHoweverOftenItIsRead()
+    {
+        OwnTestAssembly("Fixture Mod", "fixture.mod");
+        var error = CrashInFixtureMod();
+        for (var i = 0; i < 3; i++) RepeatedErrorFinder.Observe(error);
+        RepeatedErrorFinder.Observe(new InvalidOperationException("wrapped", error));
+
+        var row = RepeatedErrorFinder.Snapshot().Single();
+        Assert.That(row.Count, Is.EqualTo(1));
+        Assert.That(row.Exception, Is.EqualTo("NullReferenceException"), "counted as its innermost cause");
+    }
+
+    /// Codex's review 4: two mods failing in one shared helper were one error, blamed on whichever
+    /// came first. ModA fails once and ModB a hundred times, so the notice must name ModB.
+    [Test]
+    public void TwoModsFailingInOneSharedHelperAreTwoErrors()
+    {
+        var modA = FixtureCaller("ModA");
+        var modB = FixtureCaller("ModB");
+        RepeatedErrorFinder.Observe(ExceptionFrom(modA));
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(ExceptionFrom(modB));
+
+        var rows = RepeatedErrorFinder.Snapshot();
+        Assert.That(rows.Select(r => (r.Owner, r.Count)), Is.EqualTo(new[] { ("ModB (modb)", 100), ("ModA (moda)", 1) }));
+        Assert.That(Log.Warnings.Single(), Does.Contain("ModB (modb) has thrown the same InvalidOperationException 100 times")
+                                         .And.Contain("at ModB.Caller.Run, thrown in FixtureGame.Helper.Fail"));
+    }
+
+    /// A long load can log many one-off errors before play starts. When the list is full the
+    /// rarest gives way, so a flood that starts later is still counted and named.
+    [Test]
+    public void OneOffErrorsGiveWayToALaterFlood()
+    {
+        for (var i = 0; i < RepeatedErrorFinder.MaxTracked; i++)
+        {
+            var site = "Loader.Step" + i;
+            RepeatedErrorFinder.Record((typeof(InvalidOperationException), site, site),
+                new RepeatedErrorFinder.Entry { Exception = "InvalidOperationException", Site = site, ThrownIn = site, Owner = "Some Mod (some.mod)" });
+        }
+
+        OwnTestAssembly("Fixture Mod", "fixture.mod");
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(CrashInFixtureMod());
+
+        var rows = RepeatedErrorFinder.Snapshot();
+        Assert.That(rows, Has.Count.EqualTo(RepeatedErrorFinder.MaxTracked));
+        Assert.That(rows[0].Count, Is.EqualTo(RepeatedErrorFinder.NoticeAt));
+        Assert.That(Log.Warnings.Single(), Does.Contain("Fixture Mod (fixture.mod) has thrown"));
+    }
+
+    /// With no mod's own code on the stack, a patch is how a mod's change reached the failing game
+    /// method. The notice lists who patched the methods the error passed through, and says it is
+    /// that, not who is at fault.
+    [Test]
+    public void AnErrorWithNoModOnItsStackListsThePatchesItPassedThrough()
+    {
+        var patch = FixtureCaller("Patcher");
+        var crash = typeof(FixtureMod.Loader).GetMethod(nameof(FixtureMod.Loader.Crash))!;
+        HarmonyLib.Harmony.PatchInfo[crash] = new HarmonyLib.Patches
+        {
+            Prefixes = new(new List<HarmonyLib.Patch> { new() { owner = "patcher", PatchMethod = patch } }),
+        };
+
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(CrashInFixtureMod());
+
+        Assert.That(Log.Warnings.Single(), Does.Contain("No single mod's code is on its stack")
+                                         .And.Contain("carry patches from Patcher (patcher)"));
     }
 
     /// The log is not safe off the main thread, so a threshold crossed there waits for the next
@@ -683,13 +768,12 @@ public sealed class RuntimeLogicTests
     public void AThresholdCrossedOnAWorkerIsReportedByTheNextMainThreadRepeat()
     {
         OwnTestAssembly("Fixture Mod", "fixture.mod");
-        var error = CrashInFixtureMod();
         UnityData.IsInMainThread = false;
-        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(error);
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++) RepeatedErrorFinder.Observe(CrashInFixtureMod());
         Assert.That(Log.Warnings, Is.Empty, "nothing logged off the main thread");
 
         UnityData.IsInMainThread = true;
-        RepeatedErrorFinder.Observe(error);
+        RepeatedErrorFinder.Observe(CrashInFixtureMod());
         Assert.That(Log.Warnings, Has.Count.EqualTo(1));
     }
 
@@ -703,6 +787,40 @@ public sealed class RuntimeLogicTests
         ImageOptCompatMod.Settings.findRepeatedErrors = true;
         Call(typeof(RepeatedErrorFinder), "Postfix", CrashInFixtureMod());
         Assert.That(RepeatedErrorFinder.Snapshot(), Has.Count.EqualTo(1));
+    }
+
+    /// Environment.StackTrace asks for the current stack with no exception. That is not an error.
+    [Test]
+    public void AStackTraceWithNoExceptionIsNotAnError()
+    {
+        Call(typeof(RepeatedErrorFinder), "Postfix", new object?[] { null });
+        Assert.That(RepeatedErrorFinder.Snapshot(), Is.Empty);
+    }
+
+    /// A mod of its own, in an assembly of its own, whose one method calls the shared game helper.
+    private static MethodInfo FixtureCaller(string name)
+    {
+        var assembly = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(name), AssemblyBuilderAccess.Run);
+        var type = assembly.DefineDynamicModule(name).DefineType(name + ".Caller", TypeAttributes.Public);
+        var run = type.DefineMethod("Run", MethodAttributes.Public | MethodAttributes.Static, typeof(void), Type.EmptyTypes);
+        run.SetImplementationFlags(MethodImplAttributes.NoInlining);
+        var il = run.GetILGenerator();
+        il.Emit(OpCodes.Call, typeof(FixtureGame.Helper).GetMethod(nameof(FixtureGame.Helper.Fail))!);
+        il.Emit(OpCodes.Ret);
+        var method = type.CreateType()!.GetMethod("Run")!;
+
+        var pack = new ModContentPack { Name = name, PackageId = name.ToLowerInvariant() };
+        pack.assemblies.loadedAssemblies.Add(method.DeclaringType!.Assembly);
+        LoadedModManager.RunningMods.Add(pack);
+        ModAttribution.Reset();
+        return method;
+    }
+
+    private static Exception ExceptionFrom(MethodInfo method)
+    {
+        try { method.Invoke(null, null); }
+        catch (TargetInvocationException e) { return e.InnerException!; }
+        throw new InvalidOperationException("the fixture did not throw");
     }
 
     private static void OwnTestAssembly(string name, string packageId)

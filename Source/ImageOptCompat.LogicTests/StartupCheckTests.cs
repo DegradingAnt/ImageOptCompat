@@ -17,6 +17,8 @@ public sealed class StartupCheckTests
         EarlyGuardsFound = 2, EarlyGuardsInstalled = 2, NullGuardTargets = 2,
         AudioGuardInstalled = true, TextureHooksInstalled = true, ImageOptTrackingFound = true,
         HarmonyFramesResolve = true, FglSupport = true,
+        ReadbackHooksLive = 8, ReadbackHooksExpected = 8, VehicleReadbackOn = true, VehicleHookLive = true,
+        ImageOptChecksRan = true,
     };
 
     private static Outcome OutcomeOf(Snapshot s, string name) =>
@@ -65,8 +67,68 @@ public sealed class StartupCheckTests
         s.ImageOptActive = false;
         s.TextureHooksInstalled = false;
         s.ImageOptTrackingFound = false;
+        s.ReadbackHooksLive = 0;
+        s.VehicleHookLive = false;
+        s.ImageOptChecksRan = false;
         Assert.That(OutcomeOf(s, "Double-extension repair"), Is.EqualTo(Outcome.Off));
         Assert.That(OutcomeOf(s, "Generic pixel readback"), Is.EqualTo(Outcome.Off));
+        Assert.That(OutcomeOf(s, "Vehicle readback"), Is.EqualTo(Outcome.Off));
+        // The version check only runs with Image Opt. It used to read as a pass without it.
+        Assert.That(OutcomeOf(s, "Tested versions"), Is.EqualTo(Outcome.Off));
+        Assert.That(Evaluate(s).Any(r => r.Name.StartsWith("Faster Game Loading", StringComparison.Ordinal)), Is.False);
+    }
+
+    /// Codex's review 4: the readback check passed on Image Opt's texture record alone, with not
+    /// one of this mod's hooks installed. One missing hook must now fail it, record or not.
+    [Test]
+    public void AMissingReadbackHookFailsEvenWithImageOptsRecordPresent()
+    {
+        var s = Healthy();
+        s.ReadbackHooksLive = 7;
+        var result = Evaluate(s).Single(r => r.Name == "Generic pixel readback");
+        Assert.That(result.Outcome, Is.EqualTo(Outcome.Failed));
+        Assert.That(result.Detail, Does.Contain("7 of 8"));
+    }
+
+    [Test]
+    public void ReadbackNeedsImageOptsRecordAsWellAsItsHooks()
+    {
+        var s = Healthy();
+        s.ImageOptTrackingFound = false;
+        Assert.That(OutcomeOf(s, "Generic pixel readback"), Is.EqualTo(Outcome.Failed));
+    }
+
+    /// Zero of zero is not a pass: it means nothing was checked.
+    [Test]
+    public void ReadbackHooksThatCouldNotBeListedFail()
+    {
+        var s = Healthy();
+        s.ReadbackHooksLive = 0;
+        s.ReadbackHooksExpected = 0;
+        Assert.That(OutcomeOf(s, "Generic pixel readback"), Is.EqualTo(Outcome.Failed));
+    }
+
+    // By name: Outcome is internal, and a public test method cannot take it as a parameter.
+    [TestCase(true, true, "Pass")]
+    [TestCase(true, false, "Failed")]
+    [TestCase(false, false, "Off")]
+    public void VehicleReadbackIsCheckedLikeTheOtherFixes(bool on, bool live, string expected)
+    {
+        var s = Healthy();
+        s.VehicleReadbackOn = on;
+        s.VehicleHookLive = live;
+        Assert.That(OutcomeOf(s, "Vehicle readback").ToString(), Is.EqualTo(expected));
+    }
+
+    /// The Faster Game Loading and version results default to "nothing wrong". When the checks
+    /// never ran, that default must not be shown as a pass.
+    [Test]
+    public void ChecksThatDidNotRunAreNotReportedAsPassed()
+    {
+        var s = Healthy();
+        s.ImageOptChecksRan = false;
+        Assert.That(OutcomeOf(s, "Tested versions"), Is.EqualTo(Outcome.Failed));
+        Assert.That(Evaluate(s).Any(r => r.Name.StartsWith("Faster Game Loading", StringComparison.Ordinal)), Is.False);
     }
 
     /// Nothing to guard is fine; a guarded mod that changed shape is not.

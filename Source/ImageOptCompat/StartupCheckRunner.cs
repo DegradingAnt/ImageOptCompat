@@ -30,6 +30,11 @@ internal static class StartupCheckRunner
     private static void Run()
     {
         var settings = ImageOptCompatMod.Settings;
+        var harmony = new Harmony(ModInfo.HarmonyId);
+
+        // Asked of Harmony itself, not of this mod's bookkeeping: see PatchAudit.
+        var readbackHooks = PatchAudit.PatchClassesIn(typeof(Texture2DReadPatches));
+
         var snapshot = new StartupCheck.Snapshot
         {
             ImageOptActive = ImageOptCompatMod.ImageOptActive,
@@ -49,10 +54,15 @@ internal static class StartupCheckRunner
             RepeatedFinderInstalled = RepeatedErrorFinder.Installed,
             TextureHooksInstalled = MissingTextureReport.Installed,
             ImageOptTrackingFound = ImageOptCompatMod.ImageOptActive && Texture2DReadPatches.ImageOptTrackingFound,
-            HarmonyFramesResolve = StartupCheck.HarmonyFramesResolve(new Harmony("degradingant.imageoptcompat")),
+            ReadbackHooksExpected = readbackHooks.Count,
+            ReadbackHooksLive = PatchAudit.LiveCount(harmony.Id, readbackHooks),
+            VehicleReadbackOn = settings.vehicleReadback,
+            VehicleHookLive = PatchAudit.IsLive(harmony.Id, typeof(ModContentPack_AnyContentLoaded_Patch)),
+            HarmonyFramesResolve = StartupCheck.HarmonyFramesResolve(harmony),
             FglSupport = ImageOptCompatMod.FglHasImageOptSupport,
             UntestedVersions = ImageOptCompatMod.UntestedVersions,
             FglUntestedSettings = ImageOptCompatMod.FglUntestedSettings,
+            ImageOptChecksRan = ImageOptCompatMod.ImageOptChecksRan,
         };
 
         var results = StartupCheck.Evaluate(snapshot);

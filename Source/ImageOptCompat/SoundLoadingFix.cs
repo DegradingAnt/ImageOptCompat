@@ -59,25 +59,51 @@ internal static class SoundLoadingFix
         }
     }
 
-    /// Parameter names match Manager.Load exactly: Harmony binds them by name.
-    private static void LoadPrefix(ref Stream dataStream, AudioFormat audioFormat, string unityAudioClipName)
+    /// Parameter names match Manager.Load exactly: Harmony binds them by name, and the loader really
+    /// does spell the last one "dipose".
+    private static void LoadPrefix(ref Stream dataStream, AudioFormat audioFormat, string unityAudioClipName,
+                                   bool diposeDataStreamIfNotNeeded)
     {
         if (!ImageOptCompatMod.Settings.fixSoundLoading || audioFormat != AudioFormat.wav) return;
 
-        var original = dataStream;
-        if (original == null || !original.CanSeek) return;
+        var repaired = Repair(dataStream, diposeDataStreamIfNotNeeded);
+        if (repaired == null) return;
+
+        dataStream = repaired;
+        Interlocked.Increment(ref Repaired);
+
+        // The log is not safe off the main thread; the settings page shows the count either way.
+        if (UnityData.IsInMainThread)
+            Report.Write(ReportKind.Info, $"read '{unityAudioClipName}' as plain PCM: its WAV header is the "
+                                        + "extensible kind RimWorld's decoder rejects.");
+    }
+
+    /// The stream to give the loader instead of the original, or null to leave the original alone.
+    ///
+    /// Ownership follows the loader's own flag. With it set, the caller has handed the stream over
+    /// to be disposed once it is no longer needed. After the copy it is no longer needed, so it is
+    /// disposed here, because the loader never sees it again. With it clear, the caller keeps the
+    /// stream, so it is left open and rewound to where the caller left it.
+    ///
+    /// The replacement is independent of the original. The loader disposes it under the same flag.
+    /// Otherwise it is only managed memory, which the collector reclaims, so streamed and background
+    /// loads can keep it for as long as they need.
+    internal static Stream? Repair(Stream? original, bool disposeOriginal)
+    {
+        if (original == null || !original.CanSeek) return null;
 
         long start;
         try { start = original.Position; }
-        catch (Exception) { return; }
+        catch (Exception) { return null; }
 
+        byte[]? rewritten;
         try
         {
             // Peek first: an ordinary file is never read twice or copied.
             var peek = new byte[PeekBytes];
             var peeked = ReadUpTo(original, peek, peek.Length);
             original.Position = start;
-            if (!WavHeaderFix.IsRewritable(peek, peeked)) return;
+            if (!WavHeaderFix.IsRewritable(peek, peeked)) return null;
 
             var whole = new byte[original.Length - start];
             var read = ReadUpTo(original, whole, whole.Length);
@@ -88,29 +114,26 @@ internal static class SoundLoadingFix
                 whole = trimmed;
             }
 
-            var rewritten = WavHeaderFix.Rewrite(whole);
-            if (rewritten == null)
-            {
-                original.Position = start;
-                return;
-            }
-
-            // Load disposes the stream it is given once it is done with it; the original is now ours.
-            dataStream = new MemoryStream(rewritten, writable: false);
-            original.Dispose();
-            Interlocked.Increment(ref Repaired);
-
-            // The log is not safe off the main thread; the settings page shows the count either way.
-            if (UnityData.IsInMainThread)
-                Report.Write(ReportKind.Info, $"read '{unityAudioClipName}' as plain PCM: its WAV header is the "
-                                            + "extensible kind RimWorld's decoder rejects.");
+            rewritten = WavHeaderFix.Rewrite(whole);
+            original.Position = start;
         }
         catch (Exception)
         {
             // Leave the game to try the file exactly as before.
             try { original.Position = start; }
             catch (Exception) { /* A stream that cannot seek back fails in vanilla too. */ }
+            return null;
         }
+
+        if (rewritten == null) return null;
+
+        if (disposeOriginal)
+        {
+            try { original.Dispose(); }
+            catch (Exception) { /* The copy is complete; a failed close changes nothing for the sound. */ }
+        }
+
+        return new MemoryStream(rewritten, writable: false);
     }
 
     /// Only the null clip is skipped; every real clip's state is set as normal.

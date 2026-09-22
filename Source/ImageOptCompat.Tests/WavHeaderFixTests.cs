@@ -16,7 +16,7 @@ public class WavHeaderFixTests
         { 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71 };
 
     /// A WAV file as audio editors write it: fmt, then a LIST metadata chunk, then data.
-    private static byte[] Wav(ushort tag, ushort channels, uint rate, ushort bits, byte[] data,
+    internal static byte[] Wav(ushort tag, ushort channels, uint rate, ushort bits, byte[] data,
                               ushort validBits = 0, ushort subCode = 1, uint fmtSize = 40)
     {
         using var stream = new MemoryStream();
@@ -55,7 +55,7 @@ public class WavHeaderFixTests
         return bytes;
     }
 
-    private static byte[] Samples(int length) => Enumerable.Range(0, length).Select(i => (byte)(i * 7)).ToArray();
+    internal static byte[] Samples(int length) => Enumerable.Range(0, length).Select(i => (byte)(i * 7)).ToArray();
 
     [Test]
     public void ExtensiblePcmBecomesPlainPcmWithTheSameSamples()

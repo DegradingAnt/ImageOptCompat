@@ -64,6 +64,16 @@ internal static class StartupCheck
         internal bool? FglSupport { get; set; }
         internal string? UntestedVersions { get; set; }
         internal string? FglUntestedSettings { get; set; }
+
+        /// The readback fix's hooks as Harmony has them now: seven pixel reads plus the cleanup.
+        internal int ReadbackHooksLive { get; set; }
+        internal int ReadbackHooksExpected { get; set; }
+        internal bool VehicleReadbackOn { get; set; }
+        internal bool VehicleHookLive { get; set; }
+
+        /// Whether the Faster Game Loading and version checks ran to the end. Their results default
+        /// to "nothing wrong", so without this a check that never ran would read as a pass.
+        internal bool ImageOptChecksRan { get; set; }
     }
 
     /// The results of the last run, for the main-menu line and the settings page.
@@ -128,28 +138,52 @@ internal static class StartupCheck
             Fix("Missing-texture report", s.ReportOn,
                 s.TextureHooksInstalled ? Pass("recording") : Fail("not in place; nothing is being recorded")),
 
-            WithImageOpt("Generic pixel readback", s.ReadbackOn, s.ImageOptActive,
-                s.ImageOptTrackingFound ? Pass("Image Opt's texture record found")
-                : Fail("Image Opt's texture record was not found; Image Opt may have changed version")),
+            WithImageOpt("Generic pixel readback", s.ReadbackOn, s.ImageOptActive, Readback(s)),
+
+            WithImageOpt("Vehicle readback", s.VehicleReadbackOn, s.ImageOptActive,
+                s.VehicleHookLive ? Pass("in place")
+                : Fail("not in place; vehicle liveries can render black or with colour masks")),
 
             new("Mod names in reports",
                 s.HarmonyFramesResolve ? Outcome.Pass : Outcome.Failed,
                 s.HarmonyFramesResolve ? "Harmony-patched methods resolve to their originals"
                 : "Harmony-patched methods could not be resolved; reports may name the wrong mod"),
 
-            new("Tested versions",
-                s.UntestedVersions == null ? Outcome.Pass : Outcome.Untested,
-                s.UntestedVersions ?? "Image Opt, Faster Game Loading and Harmony are the tested versions"),
+            TestedVersions(s),
         };
 
         AddFasterGameLoadingChecks(results, s);
         return results;
     }
 
+    /// Both halves must hold: Image Opt's record of its own textures, which is upstream, and every
+    /// one of this mod's hooks, which are ours. The record alone used to pass.
+    private static (Outcome, string) Readback(Snapshot s)
+    {
+        if (!s.ImageOptTrackingFound)
+            return Fail("Image Opt's texture record was not found; Image Opt may have changed version");
+        if (s.ReadbackHooksExpected == 0)
+            return Fail("its hooks could not be listed, so none could be checked");
+        if (s.ReadbackHooksLive < s.ReadbackHooksExpected)
+            return Fail($"{s.ReadbackHooksLive} of {s.ReadbackHooksExpected} hooks in place; mods reading "
+                      + "Image Opt textures can get errors or blank data");
+        return Pass($"all {s.ReadbackHooksLive} hooks in place, and Image Opt's texture record found");
+    }
+
+    private static Result TestedVersions(Snapshot s)
+    {
+        const string Name = "Tested versions";
+        if (!s.ImageOptActive) return new Result(Name, Outcome.Off, "Image Opt is not active");
+        if (!s.ImageOptChecksRan)
+            return new Result(Name, Outcome.Failed, "the version and Faster Game Loading checks did not run; the log says why");
+        return new Result(Name, s.UntestedVersions == null ? Outcome.Pass : Outcome.Untested,
+            s.UntestedVersions ?? "Image Opt, Faster Game Loading and Harmony are the tested versions");
+    }
+
     /// Only when Faster Game Loading is active; its settings only matter on the build that works.
     private static void AddFasterGameLoadingChecks(List<Result> results, Snapshot s)
     {
-        if (s.FglSupport == null) return;
+        if (!s.ImageOptActive || !s.ImageOptChecksRan || s.FglSupport == null) return;
 
         results.Add(new("Faster Game Loading build",
             s.FglSupport == true ? Outcome.Pass : Outcome.Failed,

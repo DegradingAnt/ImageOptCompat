@@ -104,7 +104,7 @@ namespace ImageOptCompat
 {
     public sealed class Settings
     {
-        public bool guardFailedAudioClips = true, fixDoubleExtensionPaths = true, reportMissingTextures = true;
+        public bool guardFailedAudioClips = true, fixDoubleExtensionPaths = true, reportMissingTextures = true, findRepeatedErrors = true;
         public ReportLevel reportLevel = ReportLevel.Important;
     }
     public static class ImageOptCompatMod
@@ -126,5 +126,11 @@ namespace FixtureMod
     {
         [MethodImpl(MethodImplOptions.NoInlining)]
         public static void LoadIcon() { _ = Verse.ContentFinder<UnityEngine.Texture2D>.Get("FixtureMod/MissingIcon"); }
+    }
+
+    /// A patch this mod puts on a game method, for the finder to name when an error passes through it.
+    public static class Patches
+    {
+        public static void ToInt32Prefix() { }
     }
 }

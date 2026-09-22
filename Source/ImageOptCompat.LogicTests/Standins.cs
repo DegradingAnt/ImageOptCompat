@@ -10,6 +10,14 @@ namespace HarmonyLib {
   // No detours exist on the test host, so every frame is its own original. The real mapping is
   // exercised on the game's Mono by ImageOptCompat.MonoTests.
   public static MethodBase? GetOriginalMethodFromStackframe(System.Diagnostics.StackFrame frame) => frame.GetMethod();
+  // The patches a test says a method carries. Real ownership is exercised by ImageOptCompat.MonoTests.
+  public static readonly Dictionary<MethodBase, Patches> PatchInfo = new();
+  public static Patches? GetPatchInfo(MethodBase method) => PatchInfo.TryGetValue(method, out var patches) ? patches : null;
+ }
+ public sealed class Patch { public string owner = ""; public MethodInfo? PatchMethod { get; set; } }
+ public sealed class Patches {
+  public System.Collections.ObjectModel.ReadOnlyCollection<Patch> Prefixes = new(new List<Patch>()), Postfixes = new(new List<Patch>()),
+   Transpilers = new(new List<Patch>()), Finalizers = new(new List<Patch>());
  }
  public static class AccessTools {
   public static bool HideImageOpt;
@@ -193,9 +201,3 @@ namespace Worldbuilder {
  public static class Rand_EnsureStateStackEmpty_Patch { public static bool Prefix() => true; }
 }
 
-namespace UnityEngine {
- // Unity formats every logged exception here; the repeated-error finder postfixes it.
- public static class StackTraceUtility {
-  internal static void ExtractStringFromExceptionInternal(object exceptiono, out string message, out string stackTrace) { message = ""; stackTrace = ""; }
- }
-}

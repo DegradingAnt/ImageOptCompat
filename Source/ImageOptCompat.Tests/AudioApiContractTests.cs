@@ -109,6 +109,37 @@ public class AudioApiContractTests
 
         var format = GetType("Assembly-CSharp.dll", "RuntimeAudioClipLoader.AudioFormat");
         Assert.That(format.GetFields().Select(f => f.Name), Does.Contain("wav"));
+
+        // And from our side: every parameter the prefixes take must exist on the target, by name and
+        // type. The ownership flag is the one the first version forgot to take.
+        var fix = ModType("ImageOptCompat.SoundLoadingFix");
+        AssertBindsTo(fix.GetMethod("LoadPrefix", AllDeclared)!, load);
+        AssertBindsTo(fix.GetMethod("SetStatePrefix", AllDeclared)!, setState);
+        Assert.That(fix.GetMethod("LoadPrefix", AllDeclared)!.GetParameters().Select(p => p.Name),
+            Does.Contain("diposeDataStreamIfNotNeeded"));
+    }
+
+    /// Our own assembly, read the same way as the game's, so the prefix and its target are
+    /// compared in one metadata universe.
+    private Type ModType(string typeName)
+    {
+        if (_context == null) Assert.Ignore("RimWorld is not installed here.");
+        var mod = _context!.LoadFromAssemblyPath(typeof(WavHeaderFix).Assembly.Location);
+        return mod.GetType(typeName) ?? throw new AssertionException($"{typeName} is missing from the mod.");
+    }
+
+    /// Harmony binds a patch parameter by name, and refuses the patch when the target has no
+    /// parameter of that name. Names starting with two underscores are Harmony's own injections.
+    internal static void AssertBindsTo(MethodInfo patch, MethodBase target)
+    {
+        foreach (var parameter in patch.GetParameters().Where(p => !p.Name!.StartsWith("__", StringComparison.Ordinal)))
+        {
+            var match = target.GetParameters().SingleOrDefault(t => t.Name == parameter.Name);
+            Assert.That(match, Is.Not.Null,
+                $"{patch.Name} takes '{parameter.Name}', which {target.DeclaringType!.Name}.{target.Name} does not have.");
+            var type = parameter.ParameterType.IsByRef ? parameter.ParameterType.GetElementType()! : parameter.ParameterType;
+            Assert.That(type.FullName, Is.EqualTo(match!.ParameterType.FullName), $"type of '{parameter.Name}'");
+        }
     }
 
     // ---- the state the guard reads -----------------------------------------------------------

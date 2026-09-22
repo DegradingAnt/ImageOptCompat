@@ -28,7 +28,7 @@ public sealed class ImageOptCompatMod : Mod
         try { ImageOptActive = ModsConfig.IsActive("dev.soeur.imageopt"); }
         catch (Exception e) { ImageOptActive = false; Report.Write(ReportKind.Problem, $"could not query Image Opt: {e.Message}"); }
 
-        var harmony = new Harmony("degradingant.imageoptcompat");
+        var harmony = new Harmony(ModInfo.HarmonyId);
 
         // Unconditional and first, so a problem found by anything below reaches the player: the
         // main-menu status line and the one-time dialog, the way the Harmony mod shows its own.
@@ -69,14 +69,58 @@ public sealed class ImageOptCompatMod : Mod
             return;
         }
 
-        harmony.PatchAll();
-        CheckFasterGameLoading();
-        if (FglHasImageOptSupport == true) CheckFglSettings();
-        CheckVersions();
+        InstallImageOptFixes(harmony);
+    }
+
+    /// Everything that only applies with Image Opt active: the attribute-declared patches, the
+    /// Faster Game Loading and version checks, and the orphan sweep.
+    private static void InstallImageOptFixes(Harmony harmony)
+    {
+        PatchClasses(harmony);
+
+        try
+        {
+            CheckFasterGameLoading();
+            if (FglHasImageOptSupport == true) CheckFglSettings();
+            CheckVersions();
+            ImageOptChecksRan = true;
+        }
+        catch (Exception e)
+        {
+            Report.Write(ReportKind.Problem, $"the Faster Game Loading and version checks could not finish: {e.Message}");
+        }
+
         Report.Write(ReportKind.Info, "active alongside Image Opt.");
 
         // Sweep before textures are requested, so a stale file is never served.
         if (Settings.sweepOrphanZstd) OrphanSweep.Run();
+    }
+
+    /// Set once the Faster Game Loading and version checks have run to the end. Their results
+    /// default to "nothing wrong", so the startup check reads this before trusting them.
+    internal static bool ImageOptChecksRan { get; private set; }
+
+    /// What harmony.PatchAll() does, one class at a time. PatchAll stops at the first class that
+    /// fails, and its exception used to end this constructor there, skipping the checks after it.
+    /// Now one class failing costs only that class, it is named, and the startup check shows which
+    /// hooks are live.
+    private static void PatchClasses(Harmony harmony)
+    {
+        foreach (var type in AccessTools.GetTypesFromAssembly(typeof(ImageOptCompatMod).Assembly))
+        {
+            if (!type.HasHarmonyAttribute()) continue;
+
+            try
+            {
+                harmony.CreateClassProcessor(type).Patch();
+            }
+            catch (Exception e)
+            {
+                var name = type.DeclaringType == null ? type.Name : $"{type.DeclaringType.Name}.{type.Name}";
+                Report.Write(ReportKind.Problem, $"the {name} patch could not be installed, so one of the "
+                                               + $"Image Opt fixes is incomplete: {e.Message}");
+            }
+        }
     }
 
     /// Both the official and Preview builds of Faster Game Loading share the packageId
@@ -323,8 +367,9 @@ public sealed class ImageOptCompatMod : Mod
         l.CheckboxLabeled("Name the mods behind repeated errors", ref Settings.findRepeatedErrors,
             "ON by default. When the same error keeps repeating, names the mod whose code throws it: in the "
           + "log after 100 repeats, and once on screen after 1,000. It reads the error itself, so it works "
-          + "even when the log only shows \"Duplicate stacktrace\". It only runs while an error is being "
-          + "logged. The full list is in the diagnostic report. Requires a restart.");
+          + "even when the log only shows \"Duplicate stacktrace\", and it also sees errors a mod catches "
+          + "and logs itself. It only runs while an error is being written out. The full list is in the "
+          + "diagnostic report. Requires a restart.");
         l.Gap();
 
         l.CheckboxLabeled("Deep null-texture diagnostic", ref Settings.nullTextureDeepDiagnostic,
