@@ -191,6 +191,18 @@ internal static class Program
         audit.UnpatchAll(owner);
         Check(PatchAudit.LiveCount(owner, classes) == 0, "removed hooks no longer read as live");
         Check(Harmony.GetPatchInfo(second)?.Prefixes.Count == 1, "the other mod's patch is untouched");
+
+        // A hand-installed postfix, as the main-menu status line is, then two mods that call Unpatch
+        // the ways the release boot's pack does: Cherry Picker removes only its own postfix, and No
+        // Version In Pause Menu removes every owner's ("*") from VersionControl.DrawInfoInCorner.
+        var first = AccessTools.Method(typeof(ImageOptCompat.AuditFixture.Targets), nameof(ImageOptCompat.AuditFixture.Targets.First));
+        var ours = AccessTools.Method(typeof(ImageOptCompat.AuditFixture.StatusLine), nameof(ImageOptCompat.AuditFixture.StatusLine.Postfix));
+        audit.Patch(first, postfix: new HarmonyMethod(ours));
+        Check(PatchAudit.IsLive(owner, first, ours), "a hand-installed postfix reads as live");
+        new Harmony("Owlchemist.CherryPicker.Unpatcher").Unpatch(first, HarmonyPatchType.Postfix, "Owlchemist.CherryPicker");
+        Check(PatchAudit.IsLive(owner, first, ours), "a mod removing only its own postfixes leaves ours live");
+        new Harmony("Jetroid.DoNotDrawVersion").Unpatch(first, HarmonyPatchType.Postfix, "*");
+        Check(!PatchAudit.IsLive(owner, first, ours), "a mod removing every owner's postfixes is seen");
     }
 
     /// The repeated-error finder on the game's own runtime and Harmony. Codex's review 4 found two
@@ -362,6 +374,9 @@ namespace ImageOptCompat.AuditFixture
     }
 
     public static class OtherMod { public static void Prefix() { } }
+
+    /// Stands where MainMenuStatus.Postfix stands: one patch method installed by hand.
+    public static class StatusLine { public static void Postfix() { } }
 }
 
 namespace ImageOptCompat.Probe

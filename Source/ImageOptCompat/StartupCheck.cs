@@ -74,6 +74,9 @@ internal static class StartupCheck
         /// Whether the Faster Game Loading and version checks ran to the end. Their results default
         /// to "nothing wrong", so without this a check that never ran would read as a pass.
         internal bool ImageOptChecksRan { get; set; }
+
+        /// The main-menu status line's hook, as Harmony has it now. Another mod can remove it.
+        internal bool StatusLineLive { get; set; }
     }
 
     /// The results of the last run, for the main-menu line and the settings page.
@@ -143,6 +146,13 @@ internal static class StartupCheck
             WithImageOpt("Vehicle readback", s.VehicleReadbackOn, s.ImageOptActive,
                 s.VehicleHookLive ? Pass("in place")
                 : Fail("not in place; vehicle liveries can render black or with colour masks")),
+
+            // Not a fix, but it is how every other result reaches the player on screen.
+            new("Main-menu status line",
+                s.StatusLineLive ? Outcome.Pass : Outcome.Failed,
+                s.StatusLineLive ? "in place"
+                : "another mod removed it, so there is no status line, startup dialog or in-game message; "
+                + "problems still go to the log and to this list"),
 
             new("Mod names in reports",
                 s.HarmonyFramesResolve ? Outcome.Pass : Outcome.Failed,

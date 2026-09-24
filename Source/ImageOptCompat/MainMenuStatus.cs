@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using HarmonyLib;
 using RimWorld;
@@ -10,10 +11,17 @@ namespace ImageOptCompat;
 
 /// The on-screen side of Report, done the way the Harmony mod does it.
 ///
-/// Harmony postfixes VersionControl.DrawInfoInCorner, draws a faded one-line status ("Harmony
-/// v2.4.2.0") in the main-menu corner with a tooltip, and shows a problem found at startup ONCE as
-/// a Dialog_MessageBox from that same postfix. This copies the pattern rather than inventing one:
-/// players already know where that corner is. The line sits one row below Harmony's.
+/// Harmony draws a faded one-line status ("Harmony v2.4.2.0") in the main-menu corner with a
+/// tooltip, and shows a problem found at startup ONCE as a Dialog_MessageBox from the same place.
+/// This copies the pattern rather than inventing one: players already know where that corner is.
+/// The line sits one row below Harmony's.
+///
+/// The hook is MainMenuDrawer.MainMenuOnGUI, not VersionControl.DrawInfoInCorner as Harmony uses.
+/// "No Version In Pause Menu" (Jetroid.DoNotDrawVersion), which the Progression pack runs, removes
+/// every postfix on DrawInfoInCorner from every mod (Unpatch with owner "*") and then skips the
+/// method. The 2026-09-24 release boot lost this line, the startup dialog and every in-game message
+/// to it. MainMenuOnGUI calls DrawInfoInCorner as its first statement, so a postfix here draws at
+/// the same moment. Seven mods in the pack patch it, and none removes other mods' patches.
 internal static class MainMenuStatus
 {
     /// Harmony draws at y=58. One small-font row below it keeps both readable.
@@ -22,19 +30,23 @@ internal static class MainMenuStatus
 
     private static bool dialogShown;
 
+    /// The hooked method and our patch on it, for the startup check to confirm the hook is live.
+    internal static MethodInfo? Target => AccessTools.Method(typeof(MainMenuDrawer), nameof(MainMenuDrawer.MainMenuOnGUI));
+    internal static MethodInfo? PatchMethod => AccessTools.Method(typeof(MainMenuStatus), nameof(Postfix));
+
     internal static void TryInstall(Harmony harmony)
     {
         try
         {
-            var target = AccessTools.Method(typeof(VersionControl), nameof(VersionControl.DrawInfoInCorner));
+            var target = Target;
             if (target == null)
             {
-                Report.Write(ReportKind.Notice, "VersionControl.DrawInfoInCorner was not found, so the main-menu "
+                Report.Write(ReportKind.Notice, "MainMenuDrawer.MainMenuOnGUI was not found, so the main-menu "
                                               + "status line is off. Problems are still written to the log.");
                 return;
             }
 
-            harmony.Patch(target, postfix: new HarmonyMethod(AccessTools.Method(typeof(MainMenuStatus), nameof(Postfix))));
+            harmony.Patch(target, postfix: new HarmonyMethod(PatchMethod));
         }
         catch (Exception e)
         {

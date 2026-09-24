@@ -63,21 +63,35 @@ internal static class StartupCheckRunner
             UntestedVersions = ImageOptCompatMod.UntestedVersions,
             FglUntestedSettings = ImageOptCompatMod.FglUntestedSettings,
             ImageOptChecksRan = ImageOptCompatMod.ImageOptChecksRan,
+            StatusLineLive = PatchAudit.IsLive(harmony.Id, MainMenuStatus.Target, MainMenuStatus.PatchMethod),
         };
 
         var results = StartupCheck.Evaluate(snapshot);
         StartupCheck.Record(results);
+        ReportWhatNothingElseReports(snapshot);
 
-        // Each fix already reported its own install failure, in its own words, when it tried. The
-        // one check nothing else covers is the Harmony self-test, so only it reports here.
+        Report.Write(ReportKind.Info, "startup check: " + StartupCheck.Summary() + Environment.NewLine
+                                    + string.Join(Environment.NewLine, results));
+    }
+
+    /// Each fix already reported its own install failure, in its own words, when it tried. Two
+    /// things nothing else reports: a hook another mod removed after it was installed, and the
+    /// Harmony self-test. With its hook gone, the status line cannot report its own absence, so the
+    /// log has to.
+    private static void ReportWhatNothingElseReports(StartupCheck.Snapshot snapshot)
+    {
+        if (!snapshot.StatusLineLive)
+        {
+            Report.Write(ReportKind.Problem, "another mod removed this patch's main-menu status line (a postfix on "
+                                           + "MainMenuDrawer.MainMenuOnGUI), so problems are not shown on screen. They "
+                                           + "are still written to the log and listed on this patch's settings page.");
+        }
+
         if (!snapshot.HarmonyFramesResolve)
         {
             Report.Write(ReportKind.Problem, "Harmony-patched methods could not be resolved to their originals, "
                                            + "so the mod named in null-texture and missing-texture reports may be "
                                            + "wrong. Harmony may have been updated.");
         }
-
-        Report.Write(ReportKind.Info, "startup check: " + StartupCheck.Summary() + Environment.NewLine
-                                    + string.Join(Environment.NewLine, results));
     }
 }

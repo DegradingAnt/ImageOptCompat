@@ -107,6 +107,22 @@ public class UnityApiContractTests
           + "Re-check which overload holds the null check before trusting NullTextureGuard.");
     }
 
+    // ---- MainMenuStatus's contract -----------------------------------------------------------
+
+    /// The status line postfixes the main-menu screen. It used to postfix
+    /// VersionControl.DrawInfoInCorner, the Harmony mod's hook, until the release boot found
+    /// No Version In Pause Menu removing every mod's postfix there. MainMenuOnGUI calls
+    /// DrawInfoInCorner first, so the line still draws at the same moment.
+    [Test]
+    public void TheMainMenuScreenIsWhereTheStatusLineHooks()
+    {
+        var drawer = GetType("Assembly-CSharp.dll", "RimWorld.MainMenuDrawer");
+        var method = drawer.GetMethod("MainMenuOnGUI", BindingFlags.Public | BindingFlags.Static);
+
+        Assert.That(method, Is.Not.Null, "RimWorld.MainMenuDrawer.MainMenuOnGUI is gone; the status line has no hook.");
+        Assert.That(method!.GetParameters(), Is.Empty);
+    }
+
     // ---- RepeatedErrorFinder's contract -------------------------------------------------------
 
     /// The finder postfixes the one method every exception passes through on its way to text: Unity's

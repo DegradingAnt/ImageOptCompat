@@ -18,7 +18,7 @@ public sealed class StartupCheckTests
         AudioGuardInstalled = true, TextureHooksInstalled = true, ImageOptTrackingFound = true,
         HarmonyFramesResolve = true, FglSupport = true,
         ReadbackHooksLive = 8, ReadbackHooksExpected = 8, VehicleReadbackOn = true, VehicleHookLive = true,
-        ImageOptChecksRan = true,
+        ImageOptChecksRan = true, StatusLineLive = true,
     };
 
     private static Outcome OutcomeOf(Snapshot s, string name) =>
@@ -118,6 +118,19 @@ public sealed class StartupCheckTests
         s.VehicleReadbackOn = on;
         s.VehicleHookLive = live;
         Assert.That(OutcomeOf(s, "Vehicle readback").ToString(), Is.EqualTo(expected));
+    }
+
+    /// The 2026-09-24 release boot: No Version In Pause Menu removes every mod's postfix from the
+    /// version corner, and the status line vanished with the startup dialog and every in-game
+    /// message. A removed hook must fail its check, and say where problems still go.
+    [Test]
+    public void AStatusLineAnotherModRemovedFails()
+    {
+        var s = Healthy();
+        s.StatusLineLive = false;
+        var result = Evaluate(s).Single(r => r.Name == "Main-menu status line");
+        Assert.That(result.Outcome, Is.EqualTo(Outcome.Failed));
+        Assert.That(result.Detail, Does.Contain("log"));
     }
 
     /// The Faster Game Loading and version results default to "nothing wrong". When the checks

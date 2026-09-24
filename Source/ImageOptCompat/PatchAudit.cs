@@ -34,19 +34,38 @@ internal static class PatchAudit
     {
         try
         {
-            var target = TargetOf(patchClass);
-            var patches = target == null ? null : Harmony.GetPatchInfo(target);
-            if (patches == null) return false;
-
-            return patches.Prefixes.Concat(patches.Postfixes).Concat(patches.Transpilers).Concat(patches.Finalizers)
-                .Any(patch => string.Equals(patch.owner, owner, StringComparison.Ordinal)
-                           && patch.PatchMethod?.DeclaringType == patchClass);
+            return IsLive(owner, TargetOf(patchClass), patch => patch.PatchMethod?.DeclaringType == patchClass);
         }
         catch (Exception)
         {
             // A class whose target cannot be resolved is not live, and saying so is the point.
             return false;
         }
+    }
+
+    /// The same question for a patch installed by hand with harmony.Patch: is this exact patch
+    /// method still on this target under this owner? "No Version In Pause Menu" removes other mods'
+    /// postfixes with Unpatch(method, Postfix, "*"), and this is how the startup check sees that.
+    internal static bool IsLive(string owner, MethodBase? target, MethodInfo? patchMethod)
+    {
+        if (patchMethod == null) return false;
+        try
+        {
+            return IsLive(owner, target, patch => patchMethod.Equals(patch.PatchMethod));
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsLive(string owner, MethodBase? target, Func<Patch, bool> isOurs)
+    {
+        var patches = target == null ? null : Harmony.GetPatchInfo(target);
+        if (patches == null) return false;
+
+        return patches.Prefixes.Concat(patches.Postfixes).Concat(patches.Transpilers).Concat(patches.Finalizers)
+            .Any(patch => string.Equals(patch.owner, owner, StringComparison.Ordinal) && isOurs(patch));
     }
 
     /// The method a patch class's attributes name, resolved from the same merged attributes
