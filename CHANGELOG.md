@@ -7,34 +7,7 @@ steps taken in between.
 
 ## [Unreleased]
 
-### Fixed
-- **The main-menu status line vanished with "No Version In Pause Menu" installed.** That mod removes
-  every mod's patches from the version corner, and the status line, the startup dialog and every
-  in-game message went with them. The line now hooks the main-menu screen itself, and a new startup
-  check says so if another mod removes it anyway.
-- **The repeated-error finder could miss two errors that take turns.** It keeps 64 errors. Once all
-  of them had repeated, a new error was always the first to be dropped, so two errors taking turns,
-  such as one mod failing in both its tick and its draw, pushed each other out forever and neither
-  was ever named. A new error now starts from the weight of the one it replaces, so an error that
-  keeps repeating keeps its place. The counts shown and the 100 and 1,000 thresholds still count only
-  what was actually seen.
-- **A pixel read the patch could not serve was retried, and logged, on every read.** A mod reading
-  such a texture pixel by pixel, or once per frame, repeated the whole copy and a log line each
-  time. Each texture is now tried once per content load.
-- **"Sweep now" said "0 orphan(s) removed, 0 file(s) scanned" when it had not run**, because Image Opt
-  was inactive or no mod had a texture folder. It now says it was skipped, and why. So does the
-  settings page's "Last sweep" line.
-- **The startup check could show a pixel-readback problem on screen with that fix switched off.** It
-  now looks for Image Opt's texture record only when the fix is on.
-
-### Changed
-- **"Recompress readback copies" is shown whether or not the vehicle fix is on.** It applies to
-  both readback fixes, but it sat under the vehicle fix and was hidden whenever that was off. Its
-  description now says what it costs, a second round of lossy compression, and when it takes effect.
-- The settings page and the log now name every fix that stays on without Image Opt, not two of them.
-- The load-order rule that keeps Sarcho Turtle behind Core is now described in About.xml, the
-  README and the Steam page. The Steam page no longer says a repaired texture path still logs an
-  error; it does not.
+Nothing yet.
 
 ## [0.3.0] - 2026-09-24
 
@@ -50,22 +23,26 @@ below.
   switch; a saved "verbose" setting carries over as Everything.
 - **Main-menu status line.** Like the Harmony mod's version line, a faded line in the main-menu
   corner says whether the mod found problems. Hover over it for details. Problems found while
-  loading are shown once, together, in one dialog.
+  loading are shown once, together, in one dialog. The line hooks the main-menu screen, not the
+  version corner, so a mod that clears the corner, such as No Version In Pause Menu, leaves it in
+  place. If another mod removes it anyway, the startup check fails and the log says why.
 - **Startup check.** While the game loads, the mod checks that every enabled fix is actually in
   place, by asking Harmony which of its hooks are live, and that Harmony-patched methods resolve so
   reports name the right mod. It also checks that the Faster Game Loading build, its settings and
   the mod versions are the tested ones. A check that could not run shows as failed, never as
-  passed. The main-menu status line shows the result, for example "all 12 startup checks passed",
-  and hovering over it lists each check. The loading screen says what it is doing, the vanilla way, so Loading
-  Progress shows it too. The same list opens the diagnostic report and heads the settings page.
+  passed. The main-menu status line shows the result, for example "all 13 startup checks passed",
+  and hovering over it lists each check. The loading screen says what it is doing, the vanilla
+  way, so Loading Progress shows it too. The same list opens the diagnostic report and heads the
+  settings page.
 - **Repeated-error finder.** When the same error keeps repeating, the mod names the mod whose code
   throws it. That is a notice in the log after 100 repeats, and once on screen after 1,000. It reads
   the error itself, so it works even when the log only says "Duplicate stacktrace". The test pack
   logged one error 4,478 times that way, and nothing named its source. It sees the errors Unity logs
   and the ones mods catch and log themselves, and it tells two mods failing in one shared game
   method apart. When no mod's code is on an error's stack, it lists the mods whose patches the
-  error passed through. It only runs while an error is being written out, lists every repeating
-  error in the diagnostic report, and has its own switch.
+  error passed through. It follows up to 64 distinct errors, and one that keeps repeating keeps its
+  place among them. It only runs while an error is being written out, lists every repeating error
+  in the diagnostic report, and has its own switch.
 - **Sound file loading repair.** Many audio editors save WAV files with an "extensible" header,
   even for ordinary 16-bit stereo sound. RimWorld's decoder rejects that header, the sound stays
   silent, and the log shows a misleading "Value cannot be null" error. The mod now reads such files
@@ -101,7 +78,13 @@ below.
 - Texture repair now hooks the game's non-generic resource fallback. The missing-texture report
   watches the game's final error lines and never suppresses them.
 - The orphan sweep checks texture folders in parallel.
-- The "Sweep now" button says what it did.
+- The "Sweep now" button says what it did, or that it was skipped and why.
+- **"Recompress readback copies" is shown whether or not the vehicle fix is on.** It applies to
+  both readback fixes, but it sat under the vehicle fix and was hidden whenever that was off. Its
+  description now says what it costs, a second round of lossy compression, and when it takes effect.
+- Without Image Opt, the settings page and the log name every fix that stays on, the new ones
+  included.
+- About.xml and the README explain the load-order rule that keeps Sarcho Turtle behind Core.
 - All log output goes through one place and follows the report level. A problem that can break
   loading is now logged as an error, as the Harmony mod does; other problems remain warnings.
 
@@ -127,13 +110,22 @@ below.
 - One Image Opt fix failing to install no longer takes the others with it. They were installed in
   one step that stopped at the first failure and skipped the Faster Game Loading and version checks
   after it. Each now installs on its own, and a failure names the part that is off.
+- **A texture the pixel-read fix could not copy was retried, and logged, on every read.** A mod
+  reading such a texture pixel by pixel, or once per frame, repeated the whole copy and a log
+  warning each time. Each texture is now tried once per content load.
+- The settings page's "Last sweep" line showed "0 orphan(s) removed, 0 file(s) scanned" for a
+  sweep that was skipped. It now says it was skipped, and why.
 
 ### Release checks
-- 168 unit and contract tests, 83 logic tests, and the regression runner. The runner has 47 checks
+- 169 unit and contract tests, 88 logic tests, and the regression runner. The runner has 50 checks
   with real Harmony patches on the installed game's Mono runtime, and it runs the game's own sound
   decoder on a real file. The Release build has no warnings.
 - A review before release found four defects in the new startup check, error finder and sound
   repair. All four are fixed, and each has a test that fails on the old code.
+- A second review found four more: two in the new error finder and startup check, and two in the
+  pixel-read fix and the sweep, which 0.2.0 shipped with. All four are fixed. The three in code a
+  test can reach each have a test that fails on the old code; the startup check's runs only in the
+  game.
 - The report level, startup check, sound repair and repeated-error finder came after that boot
   test, and the checks above cover them. A boot of this build on 2026-09-22 was closed during
   loading. It got past the point where the earlier boot logged 8 errors for the Hamster mod's
