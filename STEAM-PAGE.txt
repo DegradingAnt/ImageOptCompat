@@ -47,7 +47,7 @@ Thanks to soeur for Image Opt, Taranchuk for the original Faster Game Loading, a
 
 MIT licensed. I used AI tools during development, then checked the changes against the source and tests.
 
-The preview uses artwork from Image Opt and Faster Game Loading. Faster Game Loading artwork is Copyright (c) 2022 Taranchuk, used under the MIT licence. If an author would like their artwork changed or removed, please get in touch.
+The preview was made with an AI image tool from the artwork of Image Opt and Faster Game Loading. Faster Game Loading artwork is Copyright (c) 2022 Taranchuk, used under the MIT licence. If an author would like their artwork changed or removed, please get in touch.
 
 [h1]Technical notes[/h1]
 [b]Texture reads and vehicles[/b]

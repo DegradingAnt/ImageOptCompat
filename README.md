@@ -175,7 +175,8 @@ source, tests and installed game assemblies myself. User-facing changes are list
 
 ## Takedown
 
-The preview image combines art from Image Opt (soeur) and Faster Game Loading. If soeur, Taranchuk,
+The preview image was made with an AI image tool from the artwork of Image Opt (soeur) and Faster
+Game Loading. If soeur, Taranchuk,
 Green_Mushroom, or any author whose work this touches would like anything changed or removed, open an
 issue or ask on the Workshop page and it will be done promptly.
 
