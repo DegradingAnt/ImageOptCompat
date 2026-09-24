@@ -16,6 +16,8 @@ It helps other mods read Image Opt's textures, handles a few loading-screen erro
 
 Use the [b]Preview[/b] version of Faster Game Loading and load this patch after all three. The patch will warn you if the required Image Opt support is missing from your FGL build.
 
+It also asks to load before Sarcho Turtle. That mod builds on Core's animal defs but can sort ahead of Core in large lists; this patch loads after Core, so it holds Sarcho Turtle behind Core too.
+
 Made for [b]RimWorld 1.6 on Windows[/b].
 
 [h1]What it fixes[/h1]
@@ -56,7 +58,7 @@ The generic fix intercepts seven managed Texture2D read overloads and uses cache
 Readback requires the main thread. Direct calls to the native five-argument GetPixels overload are not covered; Image Opt handles GetPixels32 itself. Original Image Opt textures are retained by default because their native memory belongs to Image Opt. Destroying them is an advanced, opt-in setting.
 
 [b]Path correction and cache cleanup[/b]
-A folder scan can turn name.dds.zstd into the invalid content path name.dds. After that lookup fails, the patch tries name once. It leaves successful lookups alone and only repairs paths while Image Opt is active. It does not deduplicate another mod's file list or remove the error already logged by the first lookup.
+A folder scan can turn name.dds.zstd into the invalid content path name.dds. After that lookup fails, the patch tries name once. It leaves successful lookups alone and only repairs paths while Image Opt is active. A repaired lookup logs no error. It does not deduplicate another mod's file list.
 
 The orphan sweep checks active mods' resolved texture folders and removes .dds.zstd files with no matching PNG, JPG or JPEG source.
 
@@ -70,7 +72,7 @@ Missing-texture recording is off by default and excludes optional existence chec
 [b]Versions and testing[/b]
 Checked against RimWorld 1.6.4871, Harmony 2.4.2, Image Opt 0.1.13 and Faster Game Loading Preview 2026.09.07.1 with FGL's default settings. FGL's regular and Preview builds share a package ID, so the patch checks for the loading coordinator itself.
 
-The Release build passes 251 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate runner executes real Harmony patches on RimWorld's own Mono runtime, and runs the game's own sound decoder on a real file. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
+The Release build passes 257 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate runner executes real Harmony patches on RimWorld's own Mono runtime, and runs the game's own sound decoder on a real file. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
 
 The report level, startup check and repeated-error finder came after that boot. Tests cover them, but they have not yet been through a full boot. The sound repair has been seen in the game: a partial boot of this version got past the point where the earlier boot logged 8 errors for the Hamster mod's sounds, and logged none.
 

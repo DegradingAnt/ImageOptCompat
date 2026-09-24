@@ -7,7 +7,34 @@ steps taken in between.
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+- **The main-menu status line vanished with "No Version In Pause Menu" installed.** That mod removes
+  every mod's patches from the version corner, and the status line, the startup dialog and every
+  in-game message went with them. The line now hooks the main-menu screen itself, and a new startup
+  check says so if another mod removes it anyway.
+- **The repeated-error finder could miss two errors that take turns.** It keeps 64 errors. Once all
+  of them had repeated, a new error was always the first to be dropped, so two errors taking turns,
+  such as one mod failing in both its tick and its draw, pushed each other out forever and neither
+  was ever named. A new error now starts from the weight of the one it replaces, so an error that
+  keeps repeating keeps its place. The counts shown and the 100 and 1,000 thresholds still count only
+  what was actually seen.
+- **A pixel read the patch could not serve was retried, and logged, on every read.** A mod reading
+  such a texture pixel by pixel, or once per frame, repeated the whole copy and a log line each
+  time. Each texture is now tried once per content load.
+- **"Sweep now" said "0 orphan(s) removed, 0 file(s) scanned" when it had not run**, because Image Opt
+  was inactive or no mod had a texture folder. It now says it was skipped, and why. So does the
+  settings page's "Last sweep" line.
+- **The startup check could show a pixel-readback problem on screen with that fix switched off.** It
+  now looks for Image Opt's texture record only when the fix is on.
+
+### Changed
+- **"Recompress readback copies" is shown whether or not the vehicle fix is on.** It applies to
+  both readback fixes, but it sat under the vehicle fix and was hidden whenever that was off. Its
+  description now says what it costs, a second round of lossy compression, and when it takes effect.
+- The settings page and the log now name every fix that stays on without Image Opt, not two of them.
+- The load-order rule that keeps Sarcho Turtle behind Core is now described in About.xml, the
+  README and the Steam page. The Steam page no longer says a repaired texture path still logs an
+  error; it does not.
 
 ## [0.3.0] - 2026-09-24
 

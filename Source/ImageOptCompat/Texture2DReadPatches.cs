@@ -35,6 +35,11 @@ internal static class Texture2DReadPatches
     // when a weak source key is collected; never take ownership of Image Opt's sources.
     private static readonly HashSet<Texture2D> OwnedCopies = new();
 
+    /// Textures whose copy failed, by instance ID, until content teardown. Without this a failing
+    /// copy was retried, Blit and all, on every read and logged every time: a mod reading pixel by
+    /// pixel or once per frame turned one bad texture into a log flood.
+    private static readonly HashSet<int> FailedIds = new();
+
     /// long, not int: a mod calling GetPixel per pixel adds millions per texture, and an int wrapped
     /// negative within a long session.
     internal static long Served { get; private set; }
@@ -70,7 +75,8 @@ internal static class Texture2DReadPatches
 
         if (tex == null || !UnityData.IsInMainThread) return null;   // Blit/ReadPixels are main-thread only
         var ids = NativeIds();
-        if (ids == null || !ids.Contains(tex.GetInstanceID())) return null;
+        var id = tex.GetInstanceID();
+        if (ids == null || !ids.Contains(id)) return null;
         if (Copies.TryGetValue(tex, out var cached))
         {
             if (cached != null) { Served++; return cached; }   // Include cached per-pixel reads.
@@ -89,8 +95,16 @@ internal static class Texture2DReadPatches
 #pragma warning restore CA1508
         }
 
+        // Tried once per texture. The original read then runs and fails as it would without this
+        // fix, and ToCpuReadable has already logged why, once.
+        if (FailedIds.Contains(id)) return null;
         var copy = VehicleReadback.ToCpuReadable(tex);
-        if (copy == null) return null;
+        if (copy == null)
+        {
+            FailedIds.Add(id);
+            return null;
+        }
+
         Copies.Add(tex, copy);
         OwnedCopies.Add(copy);
         Served++;
@@ -101,7 +115,8 @@ internal static class Texture2DReadPatches
     {
         if (!UnityData.IsInMainThread)
         {
-            // ExecuteWhenFinished can run immediately on its caller's thread.
+            // Content teardown can run inside an asynchronous long event, and destroying textures
+            // is main-thread only, so the cleanup waits for the main thread.
             LongEventHandler.QueueLongEvent(ClearCopies, null, false, null);
             return;
         }
@@ -112,6 +127,7 @@ internal static class Texture2DReadPatches
             catch (Exception e) { Report.Write(ReportKind.Notice, $"cached texture cleanup failed: {e.Message}"); }
         }
         OwnedCopies.Clear();
+        FailedIds.Clear();
         Copies = new ConditionalWeakTable<Texture2D, Texture2D>();
         nativeIds = null;
         resolved = false;

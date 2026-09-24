@@ -95,6 +95,11 @@ The VEF and Worldbuilder guards skip those mods' own patches until the data they
 Worldbuilder the guard also sets the return value so that RimWorld's own `Rand.EnsureStateStackEmpty`
 still runs, since skipping it would break more than it fixes.
 
+One load-order rule is not a patch: About.xml asks to load this patch before **Sarcho Turtle**
+(`zal.sarchoturtle`). That mod builds on Core's animal and egg defs but can sort ahead of Core in large
+lists, leaving its ThingDefs without a `thingClass`. This patch loads after Core, so the rule holds Sarcho
+Turtle behind Core too.
+
 ## Measured results
 
 Boot test of the reviewed build (2026-09-22): the full Progression pack with Image Opt and this
@@ -161,6 +166,15 @@ On Windows with RimWorld and 64-bit Python installed, also run:
 The runner accepts `-GameRoot`, `-HarmonyDll` and `-Python` overrides. It reproduces the former
 generic-patch failure in a separate process, then verifies the current production hooks using real
 Mono/Harmony and native-operation stand-ins. It does not start the game or change the mod list.
+
+## Releasing
+
+Tag each version when it is published, so the compare links in the changelog resolve:
+
+```bash
+git tag v0.3.0 <published commit>
+git push origin v0.3.0
+```
 
 ## Credits
 

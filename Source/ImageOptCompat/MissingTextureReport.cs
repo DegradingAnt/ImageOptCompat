@@ -173,26 +173,6 @@ internal static class MissingTextureReport
         }
     }
 
-    /// Image Opt writes its cache beside the source image as "name.png.dds.zstd" -> in practice
-    /// "name.dds.zstd". A mod that builds its content paths by SCANNING its own texture folder and
-    /// calling Path.GetFileNameWithoutExtension gets "name.dds" back, because that method strips
-    /// only the LAST extension. It then asks ContentFinder for "name.dds", which is not a content
-    /// path and resolves to nothing.
-    ///
-    /// Measured: Holograms And Projectors (Vesper.HologramsAndProjectors) does exactly this and
-    /// produced 60 missing paths, 60 materials with a null texture, and 222,128 draw warnings in
-    /// one session. Any mod that scans its texture directory breaks the same way, so the fix is
-    /// generic rather than a list of package ids.
-    ///
-    /// SAFETY, and it is the reason this is narrow rather than clever:
-    ///  - it runs ONLY after the lookup already returned null, so no successful result is changed;
-    ///  - it fires ONLY on a path ending in an Image Opt artefact extension. A real RimWorld
-    ///    content path never carries a file extension, so a null here cannot be a deliberate
-    ///    "does this optional texture exist?" test that we would be falsifying;
-    ///  - a retry guard prevents re-entry, even for names ending in multiple .dds suffixes.
-    /// The Image Opt cache extension, as it appears AFTER a mod has stripped ".zstd" off
-    /// "name.dds.zstd", OR kept the whole "name.dds.zstd" name. Both are corrected on purpose; the
-    /// rule is narrow in the other direction (only these artefact suffixes, never a content path).
     /// The Image Opt cache artefact left after a single `Path.GetFileNameWithoutExtension` strips
     /// ".zstd": "name.dds.zstd" -> "name.dds". A mod that scans its own folder and strips one
     /// extension hands the game "name.dds", which is not a content path and resolves to nothing.
@@ -233,6 +213,23 @@ internal static class MissingTextureReport
         return true;
     }
 
+    /// Image Opt writes its cache beside the source image as "name.png.dds.zstd" -> in practice
+    /// "name.dds.zstd". A mod that builds its content paths by SCANNING its own texture folder and
+    /// calling Path.GetFileNameWithoutExtension gets "name.dds" back, because that method strips
+    /// only the LAST extension. It then asks ContentFinder for "name.dds", which is not a content
+    /// path and resolves to nothing.
+    ///
+    /// Measured: Holograms And Projectors (Vesper.HologramsAndProjectors) does exactly this and
+    /// produced 60 missing paths, 60 materials with a null texture, and 222,128 draw warnings in
+    /// one session. Any mod that scans its texture directory breaks the same way, so the fix is
+    /// generic rather than a list of package ids.
+    ///
+    /// SAFETY, and it is the reason this is narrow rather than clever:
+    ///  - it runs ONLY after the lookup already returned null, so no successful result is changed;
+    ///  - it fires ONLY on a path ending in an Image Opt artefact extension. A real RimWorld
+    ///    content path never carries a file extension, so a null here cannot be a deliberate
+    ///    "does this optional texture exist?" test that we would be falsifying;
+    ///  - a retry guard prevents re-entry, even for names ending in multiple .dds suffixes.
     private static bool TryRescueDoubleExtension(string itemPath, ref Texture2D? result)
     {
         if (!ImageOptCompatMod.ImageOptActive || !ImageOptCompatMod.Settings.fixDoubleExtensionPaths) return false;
@@ -247,7 +244,7 @@ internal static class MissingTextureReport
 
             // Unity's == overload, so this also rejects a destroyed texture. The compiler cannot
             // see through that operator and still treats `found` as possibly null afterwards,
-            // hence the suppression - the check above is stricter than a reference test, not weaker.
+            // hence the `!` below - the check here is stricter than a reference test, not weaker.
             if (found == null) return false;
 
             result = found!;

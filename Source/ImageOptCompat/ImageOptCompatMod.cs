@@ -64,8 +64,8 @@ public sealed class ImageOptCompatMod : Mod
 
         if (!ImageOptActive)
         {
-            Report.Write(ReportKind.Info, "Image Opt is not active - Image Opt features stay off; "
-                      + "early-UI and null-texture guards remain.");
+            Report.Write(ReportKind.Info, "Image Opt is not active - its texture fixes and the sweep stay off; "
+                      + "the early-load, null-texture and audio guards, the sound repair and the error finder remain.");
             return;
         }
 
@@ -201,8 +201,8 @@ public sealed class ImageOptCompatMod : Mod
         l.Begin(viewRect);
         l.Label(ImageOptActive
             ? "Image Opt detected - fixes are live."
-            : "Image Opt is NOT active. Texture fixes and sweep are off; "
-            + "early-UI and null-texture guards remain active.");
+            : "Image Opt is NOT active. Its texture fixes and the sweep are off; the early-load, null-texture "
+            + "and audio guards, the sound repair and the error finder remain active.");
         l.Label(FglHasImageOptSupport switch
         {
             null  => "Faster Game Loading: not active (fine).",
@@ -250,16 +250,9 @@ public sealed class ImageOptCompatMod : Mod
           + "Without this, turrets can render black or with colour masks overlaid. Requires a restart.");
         l.Gap();
 
-        // Sub-option of the readback fix: only meaningful when copies are actually being made.
+        // Sub-option of the vehicle fix: only its copies replace the original in the game's content.
         if (Settings.vehicleReadback)
         {
-            l.CheckboxLabeled("    Recompress readback copies", ref Settings.recompressCopies,
-                "ReadPixels always produces uncompressed RGBA32. When the source was block-compressed, "
-              + "keeping RGBA32 costs several times the VRAM - the opposite of what Image Opt is for. "
-              + "This recompresses the copy, which stays CPU-readable. Only applies to block-compressed "
-              + "sources whose width and height are both multiples of 4. Requires a restart.");
-            l.Gap();
-
             l.CheckboxLabeled("    Destroy the original texture (advanced)", ref Settings.destroyOriginalTexture,
                 "OFF by default, and deliberately so. Once a CPU-readable copy replaces a texture, the "
               + "original is leaked unless destroyed - but Image Opt created it with CreateExternalTexture "
@@ -268,6 +261,19 @@ public sealed class ImageOptCompatMod : Mod
               + "only if VRAM proves to be a problem. Requires a restart.");
             l.Gap();
         }
+
+        // Not under the vehicle fix: both readback fixes make their copies through the same code
+        // (VehicleReadback.ToCpuReadable), so this applies to generic pixel-read copies too, and it
+        // used to be hidden whenever the vehicle fix was off.
+        l.CheckboxLabeled("Recompress readback copies", ref Settings.recompressCopies,
+            "Applies to both readback fixes above. Reading a texture back always produces uncompressed "
+          + "RGBA32; when the source was block-compressed, that costs several times the memory - the "
+          + "opposite of what Image Opt is for. This recompresses the copy, which stays CPU-readable. "
+          + "The cost is a second round of lossy compression, so a mod reading pixels gets values that "
+          + "differ slightly from the original's. Only applies to block-compressed sources whose width "
+          + "and height are both multiples of 4. Vehicle copies are made while the game loads, so for "
+          + "them this needs a restart; pixel-read copies made after the change follow it at once.");
+        l.Gap();
 
         DrawTextureFixToggles(l);
     }
@@ -425,7 +431,7 @@ public sealed class ImageOptCompatMod : Mod
             ? "Null-texture guard: NOT installed - the log flood is not being stopped."
             : $"Null-texture guard: {NullTextureGuard.InstalledCount} draw method(s) hooked, "
             + $"{NullTextureGuard.Substituted} null draw(s) intercepted.");
-        l.Label($"Last sweep: {OrphanSweep.LastDeleted} orphan(s) removed, {OrphanSweep.LastScanned} file(s) scanned.");
+        l.Label($"Last sweep: {OrphanSweep.LastResult}.");
         DrawSoundAndErrorCounters(l);
         l.Label(MissingTextureReport.Installed && Settings.reportMissingTextures
             ? $"Missing textures recorded: {MissingTextureReport.DistinctPaths} distinct path(s)."
@@ -435,7 +441,7 @@ public sealed class ImageOptCompatMod : Mod
         if (l.ButtonText("Sweep now"))
         {
             OrphanSweep.Run(force: true);
-            Notify($"sweep finished: {OrphanSweep.LastDeleted} orphan(s) removed, {OrphanSweep.LastScanned} file(s) scanned.");
+            Notify($"Sweep now: {OrphanSweep.LastResult}.");
         }
         l.Gap();
 

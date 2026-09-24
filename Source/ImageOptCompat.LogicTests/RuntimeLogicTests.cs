@@ -366,6 +366,35 @@ public sealed class RuntimeLogicTests
         Assert.That(source.destroyed, Is.False);   // the original native is never freed by default
     }
 
+    /// A copy that fails is not retried on every read. A mod reading pixel by pixel, or once per
+    /// frame, used to repeat the Blit and the log line each time. Content teardown clears the record,
+    /// so a new content set gets a fresh try.
+    [Test]
+    public void AFailedCopyIsTriedOncePerTextureUntilContentTeardown()
+    {
+        var source = Native();
+        var blits = 0;
+        Graphics.OnBlit = () => blits++;
+        try
+        {
+            Texture2D.FailAt = "Blit";
+            for (var i = 0; i < 5; i++) Assert.That(Texture2DReadPatches.Readable(source), Is.Null);
+            Assert.That(blits, Is.EqualTo(1), "one attempt, not one per read");
+            Assert.That(Log.Warnings, Has.Count.EqualTo(1), "and one log line");
+
+            Texture2D.FailAt = null;
+            Assert.That(Texture2DReadPatches.Readable(source), Is.Null, "not retried within the same content set");
+
+            Texture2DReadPatches.ClearCopies();
+            Assert.That(Texture2DReadPatches.Readable(source), Is.Not.Null, "a new content set gets a fresh try");
+            Assert.That(blits, Is.EqualTo(2));
+        }
+        finally
+        {
+            Graphics.OnBlit = null;
+        }
+    }
+
     [TestCase("Blit"), TestCase("ReadPixels"), TestCase("Apply"), TestCase("Compress"), TestCase("Property")]
     public void CopyFailureReleasesOwnedResources(string stage)
     {
@@ -437,11 +466,26 @@ public sealed class RuntimeLogicTests
         Assert.That(File.Exists(Path.Combine(textures, "orphan.dds.zstd")), Is.False);
         Assert.That(File.Exists(Path.Combine(textures, "keep.dds.zstd")), Is.True);
         Assert.That(File.Exists(Path.Combine(textures, "original.dds")), Is.True);
+        Assert.That(OrphanSweep.LastResult, Is.EqualTo("1 orphan(s) removed, 2 file(s) scanned"));
         ImageOptCompatMod.ImageOptActive = false;
         File.WriteAllText(Path.Combine(textures, "inactive.dds.zstd"), "fixture");
         OrphanSweep.Run(force: true);
         Assert.That(File.Exists(Path.Combine(textures, "inactive.dds.zstd")), Is.True);
         Assert.That(OrphanSweep.LastDeleted, Is.Zero);
+    }
+
+    /// A skipped sweep used to report "0 orphan(s) removed, 0 file(s) scanned" on the "Sweep now"
+    /// button, which reads as a clean result. It now says it was skipped, and why.
+    [Test]
+    public void ASkippedSweepSaysSoInsteadOfReportingZeroFiles()
+    {
+        ImageOptCompatMod.ImageOptActive = false;
+        OrphanSweep.Run(force: true);
+        Assert.That(OrphanSweep.LastResult, Does.StartWith("skipped").And.Contain("Image Opt is not active"));
+
+        ImageOptCompatMod.ImageOptActive = true;   // active, but no running mod has a texture folder
+        OrphanSweep.Run(force: true);
+        Assert.That(OrphanSweep.LastResult, Does.StartWith("skipped").And.Contain("no active mod has a texture folder"));
     }
 
     [Test]
@@ -742,6 +786,54 @@ public sealed class RuntimeLogicTests
         Assert.That(rows[0].Count, Is.EqualTo(RepeatedErrorFinder.NoticeAt));
         Assert.That(Log.Warnings.Single(), Does.Contain("Fixture Mod (fixture.mod) has thrown"));
     }
+
+    /// Once every tracked error had repeated, a newcomer was always the rarest. Two errors taking
+    /// turns, as one mod failing in both its tick and its draw does, then evicted each other on
+    /// every repeat and neither was ever named. A newcomer now starts from the weight it replaced.
+    [Test]
+    public void TwoErrorsTakingTurnsAreBothNamedWhenTheListIsFull()
+    {
+        for (var i = 0; i < RepeatedErrorFinder.MaxTracked; i++)
+        {
+            for (var repeat = 0; repeat < 2; repeat++) RecordAt("Loader.Step" + i, "Some Mod (some.mod)");
+        }
+
+        for (var i = 0; i < RepeatedErrorFinder.NoticeAt; i++)
+        {
+            RecordAt("Comp.Tick", "Tick Mod (tick.mod)");
+            RecordAt("Comp.Draw", "Draw Mod (draw.mod)");
+        }
+
+        var rows = RepeatedErrorFinder.Snapshot();
+        Assert.That(rows.Take(2).Select(r => (r.Site, r.Count)), Is.EquivalentTo(new[]
+        {
+            ("Comp.Tick", RepeatedErrorFinder.NoticeAt), ("Comp.Draw", RepeatedErrorFinder.NoticeAt),
+        }));
+        Assert.That(Log.Warnings, Has.Count.EqualTo(2));
+        Assert.That(Log.Warnings, Has.Some.Contains("Tick Mod (tick.mod) has thrown the same"));
+        Assert.That(Log.Warnings, Has.Some.Contains("Draw Mod (draw.mod) has thrown the same"));
+    }
+
+    /// The newcomer inherits the evicted entry's weight to hold its place, never its count: an
+    /// error that replaces a flood must not be reported as having repeated.
+    [Test]
+    public void AnErrorThatReplacesAFloodIsNotReportedAsRepeating()
+    {
+        for (var i = 0; i < RepeatedErrorFinder.MaxTracked; i++)
+        {
+            for (var repeat = 0; repeat < RepeatedErrorFinder.NoticeAt; repeat++) RecordAt("Flood" + i, "Some Mod (some.mod)");
+        }
+
+        var notices = Log.Warnings.Count;
+        RecordAt("Once", "Other Mod (other.mod)");
+
+        Assert.That(Log.Warnings, Has.Count.EqualTo(notices), "no notice for an error seen once");
+        Assert.That(RepeatedErrorFinder.Snapshot().Single(r => r.Site == "Once").Count, Is.EqualTo(1));
+    }
+
+    private static void RecordAt(string site, string owner) =>
+        RepeatedErrorFinder.Record((typeof(InvalidOperationException), site, site),
+            new RepeatedErrorFinder.Entry { Exception = "InvalidOperationException", Site = site, ThrownIn = site, Owner = owner });
 
     /// With no mod's own code on the stack, a patch is how a mod's change reached the failing game
     /// method. The notice lists who patched the methods the error passed through, and says it is

@@ -27,6 +27,10 @@ public static class OrphanSweep
     public static int LastDeleted { get; private set; }
     public static int LastScanned { get; private set; }
 
+    /// What the last run did, for the settings page and the "Sweep now" button. A skipped sweep
+    /// used to read "0 orphan(s) removed, 0 file(s) scanned", which looks like a clean result.
+    public static string LastResult { get; private set; } = "not run yet";
+
     /// The RESOLVED texture folders of every running mod - the same source Image Opt's own
     /// compressor enumerates, so LoadFolders.xml redirection is honoured rather than guessed at.
     private static List<string> ResolvedTextureDirs()
@@ -154,6 +158,7 @@ public static class OrphanSweep
             // the kind of stale readout that misleads a later diagnosis.
             LastDeleted = 0;
             LastScanned = 0;
+            LastResult = "skipped - Image Opt is not active, so there are no Image Opt cache files to sweep";
             Report.Write(ReportKind.Info, "sweep skipped - Image Opt is not active, so nothing here owns any .dds.zstd.");
             return;
         }
@@ -170,6 +175,7 @@ public static class OrphanSweep
         {
             LastDeleted = 0;
             LastScanned = 0;
+            LastResult = "skipped - no active mod has a texture folder";
             return;
         }
         hasRun = true;
@@ -181,6 +187,8 @@ public static class OrphanSweep
 
         LastDeleted = deleted;
         LastScanned = scanned;
+        LastResult = $"{deleted.ToString(CultureInfo.InvariantCulture)} orphan(s) removed, "
+                   + $"{scanned.ToString(CultureInfo.InvariantCulture)} file(s) scanned";
         if (deleted > 0)
             Report.Write(ReportKind.Info, $"swept {deleted.ToString(CultureInfo.InvariantCulture)} orphaned .dds.zstd of {scanned.ToString(CultureInfo.InvariantCulture)} scanned across {roots.Count.ToString(CultureInfo.InvariantCulture)} texture folder(s).");
         else

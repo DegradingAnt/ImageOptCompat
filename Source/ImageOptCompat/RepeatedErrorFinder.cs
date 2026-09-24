@@ -39,8 +39,8 @@ internal static class RepeatedErrorFinder
     internal const int NoticeAt = 100;
     internal const int ProblemAt = 1000;
 
-    /// Distinct errors kept. When the list is full the rarest gives way, so one-off errors while
-    /// loading cannot crowd out a flood that starts later in play.
+    /// Distinct errors kept. When the list is full the lightest gives way, so one-off errors while
+    /// loading cannot crowd out a flood that starts later in play. See Entry.Weight.
     internal const int MaxTracked = 64;
 
     /// Mods named when an error passed only through patched game code.
@@ -55,7 +55,16 @@ internal static class RepeatedErrorFinder
 
         /// The first occurrence's frames, kept so a report can list the patches they pass through.
         internal StackTrace? Trace;
+
+        /// Occurrences seen while this entry was tracked. Reports and thresholds read this one.
         internal int Count;
+
+        /// Count plus the weight of the entry it replaced, and read only to choose what to evict.
+        /// Without it, once every tracked error had repeated, a newcomer was always the rarest: two
+        /// errors taking turns, such as one mod failing in both its tick and its draw, evicted each
+        /// other forever and never counted past one. Starting where the evicted entry left off is the
+        /// Space-Saving rule: an error that keeps repeating always outweighs a newcomer in the end.
+        internal long Weight;
         internal long LastSeen;
         internal bool NoticeSent;
         internal bool ProblemSent;
@@ -165,12 +174,13 @@ internal static class RepeatedErrorFinder
         {
             if (!Seen.TryGetValue(key, out entry!))
             {
-                if (Seen.Count >= MaxTracked) EvictRarest();
                 entry = candidate;
+                entry.Weight = Seen.Count >= MaxTracked ? EvictLightest() : 0;
                 Seen[key] = entry;
             }
 
             entry.Count++;
+            entry.Weight++;
             entry.LastSeen = ++sequence;
 
             // The log is not safe off the main thread, so a threshold crossed on a worker is reported
@@ -186,11 +196,13 @@ internal static class RepeatedErrorFinder
         else if (notice) Report.Write(ReportKind.Notice, Describe(entry, NoticeAt));
     }
 
-    /// The least-seen error goes, and of those the one seen longest ago. Called with the lock held.
-    private static void EvictRarest()
+    /// The lightest error goes, and of those the one seen longest ago. Returns its weight, for the
+    /// newcomer to start from. Called with the lock held.
+    private static long EvictLightest()
     {
-        var rarest = Seen.OrderBy(pair => pair.Value.Count).ThenBy(pair => pair.Value.LastSeen).First().Key;
-        Seen.Remove(rarest);
+        var lightest = Seen.OrderBy(pair => pair.Value.Weight).ThenBy(pair => pair.Value.LastSeen).First();
+        Seen.Remove(lightest.Key);
+        return lightest.Value.Weight;
     }
 
     private static string Describe(Entry entry, int count)

@@ -53,7 +53,10 @@ internal static class StartupCheckRunner
             SoundFixInstalled = SoundLoadingFix.Installed,
             RepeatedFinderInstalled = RepeatedErrorFinder.Installed,
             TextureHooksInstalled = MissingTextureReport.Installed,
-            ImageOptTrackingFound = ImageOptCompatMod.ImageOptActive && Texture2DReadPatches.ImageOptTrackingFound,
+            // Looked up only when the fix is on: a failed lookup raises an on-screen problem, and a fix
+            // the player switched off has nothing to report. The row then reads "switched off".
+            ImageOptTrackingFound = ImageOptCompatMod.ImageOptActive && settings.genericPixelReadback
+                                 && Texture2DReadPatches.ImageOptTrackingFound,
             ReadbackHooksExpected = readbackHooks.Count,
             ReadbackHooksLive = PatchAudit.LiveCount(harmony.Id, readbackHooks),
             VehicleReadbackOn = settings.vehicleReadback,

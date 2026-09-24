@@ -62,6 +62,9 @@ REQUIRES
 - Image Opt (soeur)
 - Faster Game Loading - Continued (Preview). Use the Preview, not the regular build: the Preview carries the Image Opt compatibility layer this patch depends on. Both builds share a package id, so the mod list cannot enforce this - the patch checks at startup and warns if the wrong one is active.
 
+LOAD ORDER
+Load this patch after Harmony, Faster Game Loading and Image Opt. It also asks to load before Sarcho Turtle (zal.sarchoturtle): that mod builds on Core's animal and egg defs but can sort ahead of Core in large lists, which leaves its animals broken. This patch loads after Core, so it holds Sarcho Turtle behind Core too.
+
 TESTED VERSIONS
 - Image Opt 0.1.13
 - Faster Game Loading - Continued (Preview) 2026.09.07.1, all settings at their defaults
@@ -70,14 +73,14 @@ Other versions may work. The patch warns if it sees one it was not tested with, 
 
 FIXES FOR IMAGE OPT + FASTER GAME LOADING
 - Pixel-readback fix, for any mod - Image Opt's textures live on the GPU, so any mod reading texture pixels gets an error or blank data. The patch answers those reads from a CPU-readable copy. It covers every mod automatically rather than a fixed list.
-- Double-extension texture paths - Image Opt saves its cache next to the image as "name.dds.zstd". A mod that builds its texture paths by scanning its own folder strips one extension and gets "name.dds", then asks the game for a file that does not exist. The texture comes back empty and Unity logs a warning on every frame it is drawn. Measured on one mod in a 1,484-mod list: 60 broken paths, 60 empty materials and 222,128 log lines in a single session. The patch retries the correct path. It only runs after a lookup has already failed, so it cannot change a result that worked.
+- Double-extension texture paths - Image Opt saves its cache next to the image as "name.dds.zstd". A mod that builds its texture paths by scanning its own folder strips one extension and gets "name.dds", then asks the game for a file that does not exist. The texture comes back empty and Unity logs a warning on every frame it is drawn. Measured on one mod in the same pack: 60 broken paths, 60 empty materials and 222,128 log lines in a single session. The patch retries the correct path. It only runs after a lookup has already failed, so it cannot change a result that worked.
 - Orphaned .dds.zstd sweep - removes Image Opt cache files whose source image has gone, which would otherwise show as stale textures. Never touches plain .dds.
 - Faster Game Loading checks - warns at startup if the regular build is active instead of the Preview, or if its settings differ from the tested defaults.
 
 FIXES THAT WORK WITHOUT IMAGE OPT
 These are not Image Opt faults. They stay on even when Image Opt is inactive, and each can be switched off in the mod settings.
 - Failed-audio guard - checks both Unity and RimWorld's decoder state before a sound grain reads a failed clip's length. Failed clips use one reusable silent clip, including folder and custom grains; Loading and Unloaded clips are preserved.
-- Null-texture guard - Unity writes "null texture passed to GUI.DrawTexture" every time a mod hands it a missing or destroyed texture. Unity writes that line itself, so the game's own repeat-message filter never sees it and it is written once per call, every frame, for the whole session. On a 1,484-mod load it was measured at 222,128 lines in one session, which is 94 percent of the entire log. Drawing and ticking share one thread, so the cost comes out of tick rate and appears as stutter and low TPS above 1x speed, while 1x looks fine. The patch skips invalid repaint draws by default, preserving the empty appearance even when alpha blending is disabled. It samples the first eight intercepted draws and, for each, names the nearest mod on the call stack, looking through Harmony-patched methods. When no single mod can be named, it says so. An optional magenta placeholder makes missing textures visible, and an opt-in deep diagnostic collects per-caller counts.
+- Null-texture guard - Unity writes "null texture passed to GUI.DrawTexture" every time a mod hands it a missing or destroyed texture. Unity writes that line itself, so the game's own repeat-message filter never sees it and it is written once per call, every frame, for the whole session. On the same pack it was measured at 222,128 lines in one session, which is 94 percent of the entire log. Drawing and ticking share one thread, so the cost comes out of tick rate and appears as stutter and low TPS above 1x speed, while 1x looks fine. The patch skips invalid repaint draws by default, preserving the empty appearance even when alpha blending is disabled. It samples the first eight intercepted draws and, for each, names the nearest mod on the call stack, looking through Harmony-patched methods. When no single mod can be named, it says so. An optional magenta placeholder makes missing textures visible, and an opt-in deep diagnostic collects per-caller counts.
 - Sound file loading repair - many audio editors save WAV files with an "extensible" header that RimWorld's decoder rejects, so the sound stays silent. This reads them as the plain PCM they are, in memory only, and lets the game log the real reason when a sound truly cannot be decoded.
 
 IT TELLS YOU WHAT IS HAPPENING
@@ -92,7 +95,7 @@ Each is only touched if it is installed. If it is not, that part does nothing.
 - Worldbuilder - reads its own settings before they have loaded, with the same result. It is held back until they exist.
 
 KNOWN GAPS - please read
-- The vehicle livery has not been visually confirmed yet. In a full boot of the 1,484-mod list, 552 vehicle textures were made readable without an error, but nobody has opened a paint page to look.
+- The vehicle livery has not been visually confirmed yet. In a full boot of the same pack, 552 vehicle textures were made readable without an error, but nobody has opened a paint page to look.
 - A mod calling the five-argument GetPixels overload directly is not covered - that one method is native and cannot be patched. The standard overloads are.
 - Null-draw reports name the nearest mod on the call stack. That is usually the mod to report to, but a missing texture can also come from elsewhere, such as a def that another mod supplied.
 - No TPS figure has been measured. In a two-hour session on the same list, Unity logged 0 null-texture warnings. The session that found the flood logged 222,128.
