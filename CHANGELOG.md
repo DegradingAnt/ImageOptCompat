@@ -9,10 +9,11 @@ steps taken in between.
 
 Nothing yet.
 
-## [0.3.0] - 2026-09-22
+## [0.3.0] - 2026-09-24
 
-First Workshop release. Boot-tested on the full Progression pack (about 1,485 mods) over a session
-of about two hours. See "Measured results" in the README.
+First Workshop release. Its core was boot-tested on the full Progression pack (about 1,485 mods)
+over a session of about two hours; see "Measured results" in the README and the release checks
+below.
 
 ### Added
 - **Report level setting.** Choose how much the mod tells you. "Game-breaking problems only" writes
@@ -106,8 +107,11 @@ of about two hours. See "Measured results" in the README.
   decoder on a real file. The Release build has no warnings.
 - A review before release found four defects in the new startup check, error finder and sound
   repair. All four are fixed, and each has a test that fails on the old code.
-- The report level, startup check, sound repair and repeated-error finder were added after the
-  boot test. They are covered by the checks above but have not yet been through a full boot.
+- The report level, startup check, sound repair and repeated-error finder came after that boot
+  test, and the checks above cover them. A boot of this build on 2026-09-22 was closed during
+  loading. It got past the point where the earlier boot logged 8 errors for the Hamster mod's
+  sounds, and logged none. The startup check, the status line and the finder have not yet been
+  seen through a full boot.
 
 ## [0.2.0] - 2026-09-21
 

@@ -96,7 +96,7 @@ KNOWN GAPS - please read
 - A mod calling the five-argument GetPixels overload directly is not covered - that one method is native and cannot be patched. The standard overloads are.
 - Null-draw reports name the nearest mod on the call stack. That is usually the mod to report to, but a missing texture can also come from elsewhere, such as a def that another mod supplied.
 - No TPS figure has been measured. In a two-hour session on the same list, Unity logged 0 null-texture warnings. The session that found the flood logged 222,128.
-- The report level, startup check, sound repair and repeated-error finder are new in this version. Tests cover them, including the game's own sound decoder, but they have not yet been through a full boot.
+- The report level, startup check and repeated-error finder are new in this version and have not yet been through a full boot; tests cover them. The sound repair has been seen in the game: a partial boot of this version got past the point where the earlier boot logged 8 errors for the Hamster mod's sounds, and logged none.
 - Automated tests cannot run Unity's native rendering or audio. They use stand-ins, check patch signatures against the installed game, and run real Harmony patches on RimWorld's own Mono runtime.
 
 I used AI tools during development, then checked the changes against the source and tests. MIT licensed; fixes welcome.

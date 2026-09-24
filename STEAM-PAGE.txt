@@ -72,6 +72,6 @@ Checked against RimWorld 1.6.4871, Harmony 2.4.2, Image Opt 0.1.13 and Faster Ga
 
 The Release build passes 251 automated tests, including installed-mod API checks and logic tests with Unity stand-ins. A separate runner executes real Harmony patches on RimWorld's own Mono runtime, and runs the game's own sound decoder on a real file. Tests cannot run Unity's native rendering or audio, so the in-game boot is the end-to-end check.
 
-The report level, startup check, sound repair and repeated-error finder came after that boot. Tests cover them, but they have not yet been through a full boot.
+The report level, startup check and repeated-error finder came after that boot. Tests cover them, but they have not yet been through a full boot. The sound repair has been seen in the game: a partial boot of this version got past the point where the earlier boot logged 8 errors for the Hamster mod's sounds, and logged none.
 
 The boot ran the full Progression pack (about 1,485 mods) for a session of about two hours. It logged 0 null-texture warnings, where the session that found the flood logged 222,128. No TPS improvement has been measured, and results will depend on what is slowing down your game.

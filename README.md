@@ -122,7 +122,7 @@ That's one machine and one mod list. Your numbers will differ.
 
 - **The vehicle livery has not been visually confirmed.** Textures convert without error, but no one has yet opened a vehicle paint page and checked the turret. This is the fix the patch exists for, and it's unverified.
 - **Proactive vehicle conversion covers ten mods.** Generic readback additionally handles other Image Opt textures on the main thread. Direct calls to the native five-argument GetPixels overload remain uncovered.
-- **The report level, startup check, sound repair and repeated-error finder have not been through a boot yet.** They came after the boot test above. Unit, logic and Mono tests cover them, including the game's own sound decoder on a real file.
+- **The report level, startup check and repeated-error finder have not been through a full boot yet.** They came after the boot test above; unit, logic and Mono tests cover them. The sound repair has been seen in the game: a partial boot of 0.3.0 got past the point where the earlier boot logged 8 errors for the Hamster mod's sounds, and logged none.
 - **No test runs Unity's native rendering or audio.** Unit and logic tests use explicit stand-ins;
   contract tests read installed game metadata. The separate Mono probe executes real Harmony
   detours on the installed game's runtime, but not Unity's native graphics or audio. The live
